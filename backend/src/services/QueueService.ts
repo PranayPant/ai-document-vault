@@ -1,41 +1,34 @@
-import { prisma } from '@utils/db';
-import { aiService } from '@services/AIService';
+import { metadataService } from './MetadataService.js';
+import { aiService } from './AIService.js';
 
 class QueueService {
   
-  // This mimics "queue.add()"
   async addJob(documentId: string) {
-    console.log(`[Queue] Queued ${documentId}`);
+    console.log(`[Queue] Queued Job for Doc: ${documentId}`);
     // FIRE AND FORGET (No await)
     this.processJob(documentId);
   }
 
   private async processJob(documentId: string) {
     try {
-      const doc = await prisma.document.findUnique({ where: { id: documentId } });
+      // 1. Fetch Metadata
+      const doc = await metadataService.getDocumentById(documentId);
       if (!doc) return;
 
-      await prisma.document.update({
-        where: { id: documentId },
-        data: { status: 'PROCESSING' }
-      });
+      // 2. Set Status to PROCESSING
+      await metadataService.updateStatus(documentId, 'PROCESSING');
 
-      // Extract & Analyze
+      // 3. Extract & Analyze
       const text = await aiService.extractText(doc.storagePath);
       const { summary, markdown } = await aiService.generateInsights(text);
 
-      await prisma.document.update({
-        where: { id: documentId },
-        data: { status: 'COMPLETED', summary, markdown }
-      });
-      console.log(`[Queue] Completed ${documentId}`);
+      // 4. Save Results
+      await metadataService.saveAIResults(documentId, summary, markdown);
+      console.log(`[Queue] Completed Job for Doc: ${documentId}`);
 
     } catch (e) {
-      console.error(`[Queue] Failed ${documentId}`, e);
-      await prisma.document.update({
-        where: { id: documentId },
-        data: { status: 'FAILED' }
-      });
+      console.error(`[Queue] Failed Job for Doc: ${documentId}`, e);
+      await metadataService.updateStatus(documentId, 'FAILED');
     }
   }
 }

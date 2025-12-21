@@ -41,6 +41,12 @@ This is the backend service for the AI Document Vault, a system designed to uplo
 
    The server will start at `http://localhost:3001`.
 
+### 🧪 Testing Uploads
+You can test the API immediately using curl:
+```bash
+curl -X POST -F "file=@/path/to/your/document.pdf" -F "filePath=/Work/Projects/Q1/doc.pdf" http://localhost:3001/api/documents
+```
+
 ---
 
 ## 🏗 Architecture & Design Decisions
@@ -50,75 +56,83 @@ This backend is built using a **Service-Oriented Architecture** with **Node.js (
 ### 1. Core Services
 The business logic is decoupled from the HTTP layer (Controllers) and organized into specialized services:
 
-*   **`StorageService`**: Handles raw file I/O operations. In this prototype, it manages the local file system (`/uploads`). In production, this service would be swapped to use the AWS S3 SDK.
+*   **`StorageService`**: Handles physical file I/O. In this prototype, it acts as a "dumb" blob store using the local file system (`/uploads`). In production, this would use AWS S3. It knows **nothing** about folders or hierarchy.
+*   **`MetadataService`**: Manages the **Logical Layer**. It handles the Folder/File hierarchy (Relational DB), stores AI metadata, and manages "Soft Deletes". It maps User Paths (Virtual) to Storage Paths (Physical).
 *   **`QueueService`**: Manages asynchronous background processing. It acts as both the Producer (adding jobs during upload) and the Consumer/Worker (processing jobs to generate AI insights).
 *   **`AIService`**: Encapsulates interactions with the LLM (Anthropic Claude). It handles text extraction (OCR/Parsing) and prompt engineering to generate summaries and markdown.
-*   **`DatabaseService` (via Prisma)**: Manages metadata, relationships, and structured AI outputs using SQLite (Prototype) or PostgreSQL (Production).
 
-### 2. Application Flows
-Here is a detailed breakdown of how data moves through the system:
+### 2. The "Decoupled Path" Architecture
+A core design choice was decoupling the **User's Virtual Path** from the **Physical Storage Path**.
+
+1.  **Virtual Path (User Intent):** `/Work/Projects/2024/Report.pdf`
+    *   Stored in the database via a recursive `Folder` model.
+    *   Allows instant renaming of folders (O(1) operation) without moving physical files.
+2.  **Physical Path (Storage Reality):** `uuid-123-456.pdf`
+    *   Stored flatly in `/uploads` (or S3 Bucket).
+    *   Prevents filename collisions and OS directory limit issues.
+
+### 3. Application Flows
 
 #### **Flow A: Upload & Process (Asynchronous)**
-*   **Trigger**: Client uploads a file via the UI.
+*   **Trigger**: Client uploads a file with a virtual path (e.g., `/Finance/Q1/budget.pdf`).
 *   **Route**: `POST /api/documents`
 *   **Controller**: `DocumentController.upload`
 *   **Execution**:
-    1.  **Storage**: Middleware saves the raw file to disk/S3.
-    2.  **Database**: Controller creates a `Document` record with status `QUEUED`.
-    3.  **Queue**: Controller calls `QueueService` to add a background job.
-    4.  **Response**: Immediate `202 Accepted` returned to client (Non-blocking).
+    1.  **Storage**: Saves binary to disk as `uuid-blob.pdf`.
+    2.  **Metadata**: 
+        *   Parses path `/Finance/Q1`.
+        *   **"Find or Create"**: Recursively checks if folders exist (checking `[Name + ParentId]` uniqueness). If not, creates them.
+        *   Creates `Document` record linked to the specific Folder ID.
+    3.  **Queue**: Adds background job.
+    4.  **Response**: Immediate `202 Accepted`.
 *   **Background Worker**:
-    1.  `QueueService` picks up the job.
-    2.  Updates status to `PROCESSING`.
-    3.  Calls `AIService` to extract text and generate insights.
-    4.  Updates Database with `summary`, `markdown`, and status `COMPLETED`.
+    *   Updates status `QUEUED` -> `PROCESSING` -> `COMPLETED`.
+    *   Generates AI Summary/Markdown.
+    *   Saves results via `MetadataService`.
 
-#### **Flow B: List Documents**
-*   **Trigger**: Client loads the Dashboard/Explorer view.
-*   **Route**: `GET /api/documents`
-*   **Controller**: `DocumentController.getAll`
-*   **Execution**:
-    1.  **Database**: Fetches metadata for all documents, ordered by date.
-    2.  **Transformation**: Maps the data to a DTO, constructing the `downloadUrl` for the frontend.
-*   **Response**: JSON Array of document metadata.
+#### **Flow B: Folder Navigation (Tree View)**
+*   **Trigger**: User expands a folder (e.g., "Finance").
+*   **Route**: `GET /api/folders/:folderId` (or `.../root` for top level).
+*   **Controller**: `DocumentController.getFolder`
+*   **Logic**:
+    *   Fetches **Lightweight Metadata** only via `MetadataService`.
+    *   Returns a list of active Sub-folders and File Names inside the target folder.
+    *   Used strictly for navigation; does not load file content or heavy AI text.
 
-#### **Flow C: View Single Document**
-*   **Trigger**: User clicks a specific file to view details.
+#### **Flow C: File Selection (Leaf Node)**
+*   **Trigger**: User clicks a specific file (e.g., "budget.pdf").
 *   **Route**: `GET /api/documents/:id`
 *   **Controller**: `DocumentController.getOne`
-*   **Execution**:
-    1.  **Database**: Fetches the specific record, including the large text fields (`summary`, `markdown`).
-*   **Response**: JSON Object containing the AI-generated content.
+*   **Logic**:
+    *   Fetches **Heavy Metadata** (AI Summary, Markdown).
+    *   Generates a **Download URL** (link to StorageService).
+*   **Response**: Composite Object (Metadata + Content Link) used to render the Split View UI.
 
 ---
 
 ## 🔮 Optimizations & Production Readiness
 
-For the scope of this prototype, several features were intentionally omitted to focus on the core architectural patterns. In a production environment, the following would be required:
+For the scope of this prototype, several features were intentionally omitted or simplified:
 
-1.  **Pagination & Filtering**:
-    *   *Current*: `GET /documents` returns all records.
-    *   *Production*: Implement cursor-based pagination (e.g., `take: 20, cursor: 'id'`) to handle thousands of documents without performance degradation.
+1.  **Soft Deletes vs. Hard Deletes**:
+    *   *Implemented*: **Soft Deletes**. When a user deletes a file/folder, we set a `deletedAt` timestamp in the DB. The item disappears from the UI instantly.
+    *   *Production Needed*: A **Cron Job** (Garbage Collector) to permanently remove "Soft Deleted" files from S3 and the Database after 30 days.
 
-2.  **Authentication & Authorization (AuthN/AuthZ)**:
-    *   *Current*: The API is public.
-    *   *Production*: Integrate JWT/OAuth (e.g., Auth0 or Supabase Auth) to ensure users can only access their own documents.
+2.  **Pagination**:
+    *   *Current*: Folder contents are returned in full.
+    *   *Production*: Cursor-based pagination for folders containing thousands of files.
 
-3.  **Input Validation**:
-    *   *Current*: Basic checks for file existence.
-    *   *Production*: Use libraries like `Zod` or `Joi` to strictly validate request bodies and file types (e.g., preventing executables from being uploaded).
+3.  **Authentication (AuthN/AuthZ)**:
+    *   *Current*: Public API.
+    *   *Production*: JWT/OAuth integration. `MetadataService` would need to filter results by `userId`.
 
-4.  **Rate Limiting**:
+4.  **Input Validation**:
+    *   *Current*: Basic checks.
+    *   *Production*: `Zod` validation for strict path checking and file type whitelisting.
+
+5.  **Rate Limiting**:
     *   *Current*: Unbounded.
-    *   *Production*: Implement rate limiting (e.g., `express-rate-limit` or Redis-based) to prevent abuse of the expensive AI API.
-
-5.  **Delete & Cleanup**:
-    *   *Current*: Files remain indefinitely.
-    *   *Production*: Add `DELETE /api/documents/:id` which transactionally removes the record from the DB and the file from S3.
-
-6.  **Error Handling**:
-    *   *Current*: Basic try/catch blocks.
-    *   *Production*: A global Exception Filter to normalize error responses (Standardized HTTP 4xx/5xx codes).
+    *   *Production*: Implement rate limiting (e.g., Redis-based) to prevent abuse of the expensive AI API.
 
 ---
 
@@ -126,10 +140,10 @@ For the scope of this prototype, several features were intentionally omitted to 
 
 | Component | Prototype Implementation (Current) | Production Strategy (Future) |
 | :--- | :--- | :--- |
-| **Database** | **SQLite** <br> *Zero setup, file-based.* | **PostgreSQL (AWS RDS)** <br> *Better concurrency and JSON search capabilities.* |
+| **Database** | **SQLite** <br> *Zero setup, file-based.* | **PostgreSQL (AWS RDS)** <br> *Better concurrency, JSON search, and recursive CTEs.* |
 | **File Storage** | **Local Disk** (`/uploads`) <br> *Served via Express Static.* | **AWS S3** <br> *Scalable object storage.* |
-| **Job Queue** | **In-Memory** <br> *No external dependencies needed to run.* | **Redis (BullMQ)** <br> *Persistent queue to handle server restarts/crashes.* |
-| **Uploads** | **Multipart/Form-Data** <br> *Direct to backend.* | **Presigned URLs** <br> *Client uploads directly to S3 to offload server bandwidth.* |
+| **Job Queue** | **In-Memory** <br> *No external dependencies.* | **Redis (BullMQ)** <br> *Persistent queue for reliability.* |
+| **Uploads** | **Multipart/Form-Data** <br> *Direct to backend.* | **Presigned URLs** <br> *Client uploads directly to S3.* |
 
 ---
 

@@ -1,24 +1,64 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
+import { body, validationResult } from 'express-validator';
 import cors from 'cors';
 import multer from 'multer';
-import { documentController } from '@controllers/DocumentController';
-import { storageService } from '@services/StorageService';
+import { documentController } from './controllers/DocumentController';
+import { storageService } from './services/StorageService';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Setup Multer
+// Multer Setup
 const storage = multer.diskStorage({
   destination: storageService.getUploadPath(),
-  filename: (req, file, cb) => cb(null, file.originalname) // Simple filename for prototype
+  filename: (req, file, cb) => {
+    // Generate unique physical filename
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + '-' + file.originalname);
+  }
 });
 const upload = multer({ storage });
 
-// Routes
-app.post('/api/documents', upload.single('file'), (req, res) => documentController.upload(req, res));
-app.get('/api/documents', (req, res) => documentController.getAll(req, res));
+// Validation Middlewares
+const validateUpload = [
+  body('filePath')
+    .notEmpty()
+    .withMessage('filePath is required')
+    .isString()
+    .withMessage('filePath must be a string'),
+  (req: Request, res: Response, next: NextFunction) => {
+    // Check if file exists
+    if (!req.file) {
+      return res.status(400).json({ 
+        errors: [{ msg: 'file field is required', param: 'file' }] 
+      });
+    }
+    
+    // Check validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    
+    next();
+  }
+];
+
+
+// 1. Upload
+app.post('/api/documents', upload.single('file'), validateUpload, (req: Request, res: Response) => documentController.upload(req, res));
+
+// 2. Folder Navigation (Tree View)
+app.get('/api/folders/:folderId', (req, res) => documentController.getFolder(req, res));
+
+// 3. Document Details (File View)
+app.get('/api/documents/:id', (req, res) => documentController.getOne(req, res));
+
+// 4. Static Files (Mocking S3)
 app.use('/files', express.static(storageService.getUploadPath()));
 
-const PORT = 3001;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`🚀 Backend running at http://localhost:${PORT}`);
+});

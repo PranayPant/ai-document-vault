@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/prisma"
@@ -10,27 +8,54 @@ datasource db {
 }
 
 model Folder {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   name      String
-  parentId  String?  // For nested folders
-  createdAt DateTime @default(now())
   
-  // Relations could be added here, simplified for prototype
+  // Recursive Hierarchy
+  parentId  String?
+  parent    Folder?   @relation("FolderHierarchy", fields: [parentId], references: [id])
+  children  Folder[]  @relation("FolderHierarchy")
+
+  // Contents
+  documents Document[]
+
+  // Soft Delete
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Constraint: No duplicate folder names in the same parent directory
+  @@unique([name, parentId])
 }
 
 model Document {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   originalName   String
-  storagePath    String   // Path to file on disk
+  
+  // Virtual Path (User's view: "/Work/Docs/")
+  userPath       String    @default("/")
+  
+  // Logical Location (Relational)
+  folderId       String?
+  folder         Folder?   @relation(fields: [folderId], references: [id])
+
+  // Physical Location (Blob Storage Key)
+  storagePath    String   
+  
   mimeType       String
   size           Int
   
-  // Processing Status
-  status         String   @default("QUEUED") // QUEUED, PROCESSING, COMPLETED, FAILED
+  // Process Status
+  status         String    @default("QUEUED")
   
   // AI Outputs
   summary        String?
   markdown       String?
   
+  // Soft Delete
+  deletedAt      DateTime?
+
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }

@@ -231,6 +231,8 @@ Current prototype focuses on core architecture. Production enhancements include:
 - [ ] Rate limiting & input validation
 - [ ] Comprehensive error handling
 - [ ] Delete operations with transactional cleanup
+- [ ] Implement ACL on file resources along with basic AuthN and AuthZ
+- [ ] Ability to choose which LLM to use
 
 See [backend/README.md](backend/README.md) for detailed production strategies.
 
