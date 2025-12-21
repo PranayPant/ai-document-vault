@@ -1,0 +1,36 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Folder {
+  id        String   @id @default(uuid())
+  name      String
+  parentId  String?  // For nested folders
+  createdAt DateTime @default(now())
+  
+  // Relations could be added here, simplified for prototype
+}
+
+model Document {
+  id             String   @id @default(uuid())
+  originalName   String
+  storagePath    String   // Path to file on disk
+  mimeType       String
+  size           Int
+  
+  // Processing Status
+  status         String   @default("QUEUED") // QUEUED, PROCESSING, COMPLETED, FAILED
+  
+  // AI Outputs
+  summary        String?
+  markdown       String?
+  
+  createdAt      DateTime @default(now())
+}
