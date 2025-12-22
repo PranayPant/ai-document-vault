@@ -15,6 +15,7 @@ export interface DocumentDto {
   markdown?: string;
   createdAt: string; // ISO date string
   downloadUrl?: string;
+  previewUrl?: string;
 }
 
 // Folder DTO

@@ -1,28 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-
-interface Document {
-  id: string;
-  originalName: string;
-  status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
-  summary?: string;
-  markdown?: string;
-  createdAt: string;
-  downloadUrl?: string;
-}
+import { DocumentDto } from '../types/backend';
 
 interface FileViewerProps {
   documentId: string;
-  onClose: () => void;
 }
 
-export default function FileViewer({ documentId, onClose }: FileViewerProps) {
-  const [document, setDocument] = useState<Document | null>(null);
+export default function FileViewer({ documentId }: FileViewerProps) {
+  const [document, setDocument] = useState<DocumentDto | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'preview' | 'summary' | 'markdown'>('preview');
-  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'summary' | 'markdown'>('summary');
 
   useEffect(() => {
     const fetchDocument = async () => {
@@ -41,14 +29,9 @@ export default function FileViewer({ documentId, onClose }: FileViewerProps) {
     fetchDocument();
   }, [documentId]);
 
-  const handleClose = () => {
-    onClose();
-    router.back();
-  };
-
   if (loading) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="flex h-[calc(100vh-200px)] items-center justify-center">
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
       </div>
     );
@@ -56,42 +39,25 @@ export default function FileViewer({ documentId, onClose }: FileViewerProps) {
 
   if (!document) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="flex h-[calc(100vh-200px)] items-center justify-center">
         <div className="rounded-lg bg-white p-8 dark:bg-gray-800">
           <p className="text-red-500">Document not found</p>
-          <button onClick={handleClose} className="mt-4 rounded bg-blue-500 px-4 py-2 text-white">
-            Close
-          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm">
-      <div className="flex h-full items-center justify-center p-4">
-        <div className="relative flex h-full max-h-[90vh] w-full max-w-7xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl dark:bg-gray-900 md:flex-row">
-          
-          {/* Close button */}
-          <button
-            onClick={handleClose}
-            className="absolute right-4 top-4 z-10 rounded-full bg-gray-200 p-2 transition-colors hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
-            aria-label="Close"
-          >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-
-          {/* Left side - File Preview (Desktop only) */}
-          <div className="hidden w-1/2 flex-col border-r border-gray-200 dark:border-gray-700 md:flex">
+    <div className="flex h-[calc(100vh-200px)] flex-col overflow-hidden rounded-lg bg-white shadow-lg dark:bg-gray-900 md:flex-row">
+      {/* Left side - File Preview */}
+      <div className="hidden w-1/2 flex-col border-r border-gray-200 dark:border-gray-700 md:flex">
             <div className="border-b border-gray-200 bg-gray-50 px-6 py-4 dark:border-gray-700 dark:bg-gray-800">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Preview</h2>
             </div>
             <div className="flex-1 overflow-hidden bg-gray-100 dark:bg-gray-800">
-              {document.downloadUrl ? (
+              {document.previewUrl ? (
                 <iframe
-                  src={document.downloadUrl}
+                  src={document.previewUrl}
                   className="h-full w-full"
                   title={document.originalName}
                 />
@@ -107,7 +73,7 @@ export default function FileViewer({ documentId, onClose }: FileViewerProps) {
           <div className="flex w-full flex-col md:w-1/2">
             {/* Header */}
             <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-              <h1 className="pr-8 text-xl font-bold text-gray-900 dark:text-white">
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">
                 {document.originalName}
               </h1>
               <div className="mt-2 flex items-center gap-2">
@@ -127,16 +93,6 @@ export default function FileViewer({ documentId, onClose }: FileViewerProps) {
 
             {/* Tabs */}
             <div className="flex border-b border-gray-200 dark:border-gray-700">
-              <button
-                onClick={() => setActiveTab('preview')}
-                className={`px-6 py-3 text-sm font-medium transition-colors md:hidden ${
-                  activeTab === 'preview'
-                    ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
-                    : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
-                }`}
-              >
-                Preview
-              </button>
               <button
                 onClick={() => setActiveTab('summary')}
                 className={`px-6 py-3 text-sm font-medium transition-colors ${
@@ -161,22 +117,6 @@ export default function FileViewer({ documentId, onClose }: FileViewerProps) {
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6">
-              {activeTab === 'preview' && (
-                <div className="md:hidden">
-                  {document.downloadUrl ? (
-                    <iframe
-                      src={document.downloadUrl}
-                      className="h-[60vh] w-full rounded border border-gray-300 dark:border-gray-600"
-                      title={document.originalName}
-                    />
-                  ) : (
-                    <div className="flex h-64 items-center justify-center text-gray-500">
-                      No preview available
-                    </div>
-                  )}
-                </div>
-              )}
-
               {activeTab === 'summary' && (
                 <div className="prose dark:prose-invert max-w-none">
                   {document.summary ? (
@@ -222,8 +162,6 @@ export default function FileViewer({ documentId, onClose }: FileViewerProps) {
               </div>
             )}
           </div>
-        </div>
-      </div>
     </div>
   );
 }

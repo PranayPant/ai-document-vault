@@ -28,9 +28,10 @@ interface FileResourceItemProps {
 export default function FileResourceItem({ id, name, type, currentPath }: FileResourceItemProps) {
   const isFolder = type === FileResourceType.FOLDER;
   
-  // Build the path for navigation
+  // Build the path for navigation with type prefix
+  const typePrefix = isFolder ? FileResourceType.FOLDER : FileResourceType.DOCUMENT;
   const basePath = currentPath ? `/dashboard/${currentPath}` : '/dashboard';
-  const href = `${basePath}/${id}`;
+  const href = `${basePath}/${typePrefix}/${id}`;
 
   return (
     <Link

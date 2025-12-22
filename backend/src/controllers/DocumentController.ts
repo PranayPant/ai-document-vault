@@ -3,6 +3,53 @@ import { metadataService } from '../services/MetadataService.js';
 import { queueService } from '../services/QueueService.js';
 
 class DocumentController {
+
+  async download(req: Request, res: Response) {
+    try {
+      const doc = await metadataService.getDocumentById(req.params.id);
+      
+      if (!doc) {
+        return res.status(404).send('Document not found');
+      }
+
+      // Express helper:
+      // 1. Reads file from doc.storagePath
+      // 2. Sets 'Content-Disposition' header so browser sees 'doc.originalName'
+      // 3. Streams the file to the client
+      res.download(doc.storagePath, doc.originalName, (err) => {
+        if (err) {
+            // Handle error, but response might be partially sent already
+            console.error("Download error:", err);
+            if (!res.headersSent) res.status(500).send("Could not download file");
+        }
+      });
+
+    } catch (e) {
+      console.error(e);
+      res.status(500).send('Server Error');
+    }
+  }
+
+  // Route: GET /files/:id/preview
+  async preview(req: Request, res: Response) {
+    try {
+      const doc = await metadataService.getDocumentById(req.params.id);
+      if (!doc) return res.status(404).send('Not found');
+
+      // Set headers to tell browser to RENDER it
+      res.setHeader('Content-Type', doc.mimeType);
+      // "inline" = Attempt to display in browser/iframe
+      res.setHeader('Content-Disposition', `inline; filename="${doc.originalName}"`);
+
+      // Stream the file
+      res.sendFile(doc.storagePath, (err) => {
+        if (err && !res.headersSent) res.status(500).send("Preview failed");
+      });
+    } catch (e) {
+      console.error(e);
+      res.status(500).send('Server Error');
+    }
+  }
   
   // POST /api/documents
   async upload(req: Request, res: Response) {
@@ -46,7 +93,7 @@ class DocumentController {
       // Construct download URL for preview of child files
       const mappedDocs = contents.documents.map(d => ({
         ...d,
-        downloadUrl: `http://localhost:${port}/files/${d.originalName}`
+        downloadUrl: `http://localhost:${port}/files/${d.id}`
       }));
 
       res.json({
@@ -67,13 +114,17 @@ class DocumentController {
       const doc = await metadataService.getDocumentById(req.params.id);
       if (!doc) return res.status(404).json({ error: 'Not found' });
 
-      // Construct storage link
       const port = process.env.PORT || 3001;
-      const downloadUrl = `http://localhost:${port}/files/${doc.originalName}`;
+      const baseUrl = `http://localhost:${port}`;
+
+      const { storagePath, userPath, ...safeDoc } = doc;
 
       res.json({
-        ...doc,
-        downloadUrl
+        ...safeDoc,
+        // Used for the <iframe> source (Left Pane)
+        previewUrl: `${baseUrl}/files/${doc.id}/preview`,
+        // Used for the "Download" button
+        downloadUrl: `${baseUrl}/files/${doc.id}/download`
       });
     } catch (e) {
       console.error(e);

@@ -1,10 +1,9 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import FileResourceItem from '@/src/components/FileResourceItem';
 import FileViewer from '@/src/components/FileViewer';
-import { FileResource } from '@/src/types/FileResource';
+import type { FileResource } from '@/src/types/FileResource';
 
 interface DynamicDashboardContentProps {
   items: FileResource[];
@@ -20,21 +19,7 @@ export default function DynamicDashboardContent({
   documentId 
 }: DynamicDashboardContentProps) {
   const router = useRouter();
-  const [viewingDocument, setViewingDocument] = useState(isDocument);
 
-  const handleCloseViewer = () => {
-    setViewingDocument(false);
-    router.back();
-  };
-
-  // Show document viewer if viewing a document
-  if (viewingDocument && documentId) {
-    return (
-      <FileViewer documentId={documentId} onClose={handleCloseViewer} />
-    );
-  }
-
-  // Show folder contents
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Breadcrumb */}
@@ -45,31 +30,48 @@ export default function DynamicDashboardContent({
         >
           My Documents
         </button>
-        {slug?.map((segment, index) => {
-          const path = `/dashboard/${slug.slice(0, index + 1).join('/')}`;
-          const isLast = index === slug.length - 1;
+        {slug && slug.length >= 2 && (() => {
+          // Parse slug pairs: ['folder', 'uuid-1', 'folder', 'uuid-2']
+          const breadcrumbs: Array<{ type: string; id: string; index: number }> = [];
+          for (let i = 0; i < slug.length; i += 2) {
+            if (i + 1 < slug.length) {
+              breadcrumbs.push({
+                type: slug[i],
+                id: slug[i + 1],
+                index: i
+              });
+            }
+          }
           
-          return (
-            <div key={index} className="flex items-center gap-2">
-              <span>/</span>
-              {isLast ? (
-                <span className="font-medium text-gray-900 dark:text-white">
-                  {segment}
-                </span>
-              ) : (
-                <button
-                  onClick={() => router.push(path)}
-                  className="hover:text-gray-900 dark:hover:text-white"
-                >
-                  {segment}
-                </button>
-              )}
-            </div>
-          );
-        })}
+          return breadcrumbs.map((crumb, index) => {
+            const path = `/dashboard/${slug.slice(0, crumb.index + 2).join('/')}`;
+            const isLast = index === breadcrumbs.length - 1;
+            
+            return (
+              <div key={index} className="flex items-center gap-2">
+                <span>/</span>
+                {isLast ? (
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {crumb.id}
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => router.push(path)}
+                    className="hover:text-gray-900 dark:hover:text-white"
+                  >
+                    {crumb.id}
+                  </button>
+                )}
+              </div>
+            );
+          });
+        })()}
       </nav>
 
-      {items.length === 0 ? (
+      {/* Show document viewer if viewing a document */}
+      {isDocument && documentId ? (
+        <FileViewer documentId={documentId} />
+      ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-white p-12 text-center dark:border-gray-700 dark:bg-gray-800">
           <svg className="h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />

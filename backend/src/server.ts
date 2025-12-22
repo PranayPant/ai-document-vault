@@ -55,8 +55,11 @@ app.get('/api/folders/:folderId', (req, res) => documentController.getFolder(req
 // 3. Document Details (File View)
 app.get('/api/documents/:id', (req, res) => documentController.getOne(req, res));
 
-// 4. Static Files (Mocking S3)
-app.use('/files', express.static(storageService.getUploadPath()));
+// 4. Preview Document (inline)
+app.get('/files/:id/preview', (req, res) => documentController.preview(req, res));
+
+// 5. Download Document
+app.get('/files/:id/download', (req, res) => documentController.download(req, res));
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

@@ -3,7 +3,7 @@ import { FileResource, FileResourceType } from '@/src/types/FileResource';
 import type { FolderContentsResponse } from '@/src/types/backend';
 import { notFound } from 'next/navigation';
 
-async function fetchFolderOrDocument(currentId: string): Promise<{
+async function fetchFolderOrDocument(currentId: string, resourceType: FileResourceType): Promise<{
   items: FileResource[];
   isDocument: boolean;
   documentId?: string;
@@ -11,13 +11,15 @@ async function fetchFolderOrDocument(currentId: string): Promise<{
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
   
   try {
-    // First, try to fetch as a folder through Next.js API route
-    const folderResponse = await fetch(`${baseUrl}/api/folders/${currentId}`, {
-      cache: 'no-store'
-    });
-    
-    if (folderResponse.ok) {
-      const data: FolderContentsResponse = await folderResponse.json();
+    if (resourceType === FileResourceType.FOLDER) {
+      // Fetch folder contents
+      const response = await fetch(`${baseUrl}/api/folders/${currentId}`, {
+        cache: 'no-store'
+      });
+      
+      if (!response.ok) notFound();
+      
+      const data: FolderContentsResponse = await response.json();
       
       // Map folders and documents to FileResource format
       const folders: FileResource[] = data.folders.map(folder => ({
@@ -36,23 +38,20 @@ async function fetchFolderOrDocument(currentId: string): Promise<{
         items: [...folders, ...documents],
         isDocument: false
       };
-    }
-    
-    // If it's not a folder, try as a document through Next.js API route
-    const docResponse = await fetch(`${baseUrl}/api/documents/${currentId}`, {
-      cache: 'no-store'
-    });
-    
-    if (docResponse.ok) {
+    } else {
+      // Fetch document details
+      const response = await fetch(`${baseUrl}/api/documents/${currentId}`, {
+        cache: 'no-store'
+      });
+      
+      if (!response.ok) notFound();
+      
       return {
         items: [],
         isDocument: true,
         documentId: currentId
       };
     }
-    
-    // If neither worked, return not found
-    notFound();
   } catch (error) {
     console.error('Error fetching data:', error);
     notFound();
@@ -66,14 +65,27 @@ export default async function DynamicDashboardPage({
 }) {
   const {slug} = await params;
   
-  // Get the current ID (last item in slug)
-  const currentId = slug?.[slug.length - 1];
-  
-  if (!currentId) {
+  if (!slug || slug.length < 2 || slug.length % 2 !== 0) {
+    // Slug must be in pairs: ['folder', 'uuid-1'] or ['folder', 'uuid-1', 'document', 'uuid-2']
     notFound();
   }
   
-  const { items, isDocument, documentId } = await fetchFolderOrDocument(currentId);
+  // Get the last pair (type and id)
+  const resourceTypeString = slug[slug.length - 2];
+  const currentId = slug[slug.length - 1];
+  
+  // Map URL string to enum
+  const resourceType = resourceTypeString === 'folder' 
+    ? FileResourceType.FOLDER 
+    : resourceTypeString === 'document' 
+    ? FileResourceType.DOCUMENT 
+    : null;
+  
+  if (!resourceType) {
+    notFound();
+  }
+  
+  const { items, isDocument, documentId } = await fetchFolderOrDocument(currentId, resourceType);
 
   return (
     <DynamicDashboardContent
