@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { useDropzone } from 'react-dropzone';
-import { usePathname, useRouter } from 'next/navigation';
+import { useDropzone, type FileWithPath } from 'react-dropzone';
+import { useParams, usePathname, useRouter } from 'next/navigation';
 
 interface DropzoneProps {
   children: React.ReactNode;
@@ -12,42 +12,47 @@ export default function Dropzone({ children }: DropzoneProps) {
   const [uploading, setUploading] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+  const params = useParams();
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
 
+    // Pattern: Looks for "/folder/" followed by 
+    // non-slash characters at the VERY END of the string ($)
+    // Capture Group 1 (([^/]+)) contains the UUID.
+    const folderMatch = pathname.match(/\/folder\/([^/]+)$/);
+
+    if (!folderMatch) {
+      // This handles "/dashboard" (Root) or invalid paths
+      alert("Please navigate into a folder before uploading.");
+      return;
+    }
+
+    // The UUID is the first capture group
+    const currentFolderId = folderMatch[1]; 
+
     setUploading(true);
 
     try {
-      // Get the current folder path from the URL
-      const pathSegments = pathname.split('/').filter(Boolean);
-      const dashboardIndex = pathSegments.indexOf('dashboard');
-      const folderPath = dashboardIndex !== -1 && pathSegments.length > dashboardIndex + 1
-        ? pathSegments.slice(dashboardIndex + 1).join('/')
-        : '';
-
       for (const file of acceptedFiles) {
+        const dropzoneFile = file as FileWithPath;
+        // Strip leading slash from relative path
+        const relativePath = (dropzoneFile.path || file.name).replace(/^\//, '');
+
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('filePath', folderPath || 'root');
+        formData.append('filePath', relativePath);
+        formData.append('parentFolderId', currentFolderId); // We are guaranteed to have this now
 
-        const response = await fetch('/api/documents', {
+        await fetch('/api/documents', {
           method: 'POST',
           body: formData,
         });
-
-        if (!response.ok) {
-          const error = await response.json();
-          console.error('Upload failed:', error);
-          alert(`Failed to upload ${file.name}`);
-        }
       }
 
-      // Refresh the page to show new files
       router.refresh();
     } catch (error) {
       console.error('Upload error:', error);
-      alert('Upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -63,8 +68,8 @@ export default function Dropzone({ children }: DropzoneProps) {
       'application/vnd.ms-excel': ['.xls'],
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
     },
-    noClick: true,
     noKeyboard: true,
+    noClick: true
   });
 
   return (

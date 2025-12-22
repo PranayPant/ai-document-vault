@@ -6,62 +6,37 @@ export class MetadataService {
 
   /**
    * RESOLVE VIRTUAL PATH -> FOLDER ID
-   * Input: "/Finance/Reports" -> Output: UUID
+   * @param pathStr The relative path (e.g. "ProjectA/specs")
+   * @param rootParentId The ID of the folder we are uploading INTO (optional)
    */
-  async ensureFolderHierarchy(pathStr: string): Promise<string | null> {
-    // Filter out empty strings and "." (current directory)
+  async ensureFolderHierarchy(pathStr: string, rootParentId: string | null = null): Promise<string | null> {
     const segments = pathStr.split('/').filter(p => p.length > 0 && p !== '.');
     
-    if (segments.length === 0) return null; // Root
+    // If path is empty (file dropped directly in folder), return the rootParentId
+    if (segments.length === 0) return rootParentId; 
 
-    let currentParentId: string | null = null;
+    // Start looking/creating inside the target folder (or Root if null)
+    let currentParentId: string | null = rootParentId;
 
     for (const folderName of segments) {
-      // 2. Declare variable with explicit type to prevent "Implicit Any" error
-      let folder: Folder | null = null;
+      let folder; 
+      
+      // Use standard Find-or-Create Logic
+      // Note: We can use findFirst/create pattern for everything now to be safe/consistent
+      // or stick to the upsert logic if parentId is known not to be null.
+      // For simplicity in this logic, we use findFirst+Create to handle the null case safely.
+      
+      folder = await prisma.folder.findFirst({
+        where: { name: folderName, parentId: currentParentId }
+      });
 
-      if (currentParentId === null) {
-        // --- ROOT FOLDER LOGIC (Parent is NULL) ---
-        // Manual Find-or-Create to avoid "upsert null" error
-        
-        folder = await prisma.folder.findFirst({
-          where: {
-            name: folderName,
-            parentId: null
-          }
-        });
-
-        if (!folder) {
-          folder = await prisma.folder.create({
-            data: {
-              name: folderName,
-              parentId: null
-            }
-          });
-        }
-
-      } else {
-        // --- SUB-FOLDER LOGIC (Parent is UUID) ---
-        // Standard Upsert is safe here
-        folder = await prisma.folder.upsert({
-          where: {
-            name_parentId: {
-              name: folderName,
-              parentId: currentParentId
-            }
-          },
-          update: {}, // No updates needed
-          create: {
-            name: folderName,
-            parentId: currentParentId
-          }
+      if (!folder) {
+        folder = await prisma.folder.create({
+          data: { name: folderName, parentId: currentParentId }
         });
       }
 
-      // Move the pointer down
-      if (folder) {
-        currentParentId = folder.id;
-      }
+      currentParentId = folder.id;
     }
     
     return currentParentId;
@@ -75,13 +50,19 @@ export class MetadataService {
     storagePath: string;
     mimeType: string;
     size: number;
-    userPath: string;
+    userPath: string;      // e.g. "ProjectA/file.txt"
+    parentFolderId?: string; // <--- NEW: Context ID
   }) {
-    // Extract directory from full path 
+    // 1. Get the directory part of the relative path
+    // Input: "ProjectA/file.txt" -> "ProjectA"
+    // Input: "file.txt" -> "." (Empty)
     const directoryPath = path.dirname(data.userPath);
     
-    // Resolve logical folder ID
-    const folderId = await this.ensureFolderHierarchy(directoryPath);
+    // 2. Resolve folder ID starting from the parent context
+    const folderId = await this.ensureFolderHierarchy(
+      directoryPath, 
+      data.parentFolderId || null // Pass the context
+    );
 
     return prisma.document.create({
       data: {
@@ -89,7 +70,7 @@ export class MetadataService {
         storagePath: data.storagePath,
         mimeType: data.mimeType,
         size: data.size,
-        userPath: data.userPath,
+        userPath: data.userPath, // We store the relative path for record keeping
         folderId: folderId,
         status: 'QUEUED',
       },

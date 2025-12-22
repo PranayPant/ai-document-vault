@@ -2,7 +2,7 @@ import FileResourceItem from '@/src/components/FileResourceItem';
 import { FileResource, FileResourceType } from '@/src/types/FileResource';
 import type { FolderContentsResponse } from '@/src/types/backend';
 
-async function getRootFolders(): Promise<FileResource[]> {
+async function getRootFolder(): Promise<FileResource[]> {
   try {
     // Fetch root folder contents through Next.js API route
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
@@ -38,7 +38,7 @@ async function getRootFolders(): Promise<FileResource[]> {
 }
 
 export default async function DashboardPage() {
-  const items = await getRootFolders();
+  const items = await getRootFolder();
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">

@@ -1,5 +1,3 @@
-import Dropzone from '@/src/components/Dropzone';
-import UploadButton from '@/src/components/UploadButton';
 import Link from 'next/link';
 
 export default function DashboardLayout({
@@ -20,24 +18,9 @@ export default function DashboardLayout({
               AI Document Vault
             </span>
           </Link>
-
-          <div className="flex items-center gap-4">
-            <UploadButton />
-
-            <Link
-              href="/"
-              className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-            >
-              Back to Home
-            </Link>
-          </div>
         </div>
       </nav>
-
-      {/* Main content wrapped in Dropzone */}
-      <Dropzone>
         {children}
-      </Dropzone>
     </div>
   );
 }

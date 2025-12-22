@@ -56,8 +56,12 @@ class DocumentController {
   async upload(req: Request, res: Response) {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-    // Expecting full path like "/Projects/2024/report.pdf"
-    const userPath = req.body.filePath || '/'; 
+    // 1. Get Inputs
+    // filePath: The relative path of the file being uploaded (e.g. "MyFolder/doc.pdf")
+    const userPath = req.body.filePath || req.file.originalname;
+
+    // parentFolderId: The ID of the folder the user is currently "looking at"
+    const parentFolderId = req.body.parentFolderId || undefined;
 
     try {
       const doc = await metadataService.createDocument({
@@ -65,7 +69,8 @@ class DocumentController {
         storagePath: req.file.filename,
         mimeType: req.file.mimetype,
         size: req.file.size,
-        userPath: userPath 
+        userPath,
+        parentFolderId 
       });
 
       await queueService.addJob(doc.id);
