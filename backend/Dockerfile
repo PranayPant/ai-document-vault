@@ -14,8 +14,8 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
-# Generate Prisma Client with a dummy DATABASE_URL
-ENV DATABASE_URL="file:./prisma/dev.db"
+# Generate Prisma Client with a DATABASE_URL
+ENV DATABASE_URL="file:./dev.db"
 RUN pnpm generate
 
 # Create uploads directory

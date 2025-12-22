@@ -9,12 +9,9 @@ services:
       - ./backend/.env
       - ./backend/.env.local
     environment:
-      - NODE_ENV=development
-      - DATABASE_URL=file:./prisma/dev.db
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     volumes:
       - ./backend/uploads:/app/uploads
-      - ./backend/prisma:/app/prisma
     networks:
       - app-network
 

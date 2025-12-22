@@ -1,11 +1,11 @@
 import { metadataService } from './MetadataService.js';
 import { aiService } from './AIService.js';
+import { storageService } from './StorageService.js';
 
 class QueueService {
   
   async addJob(documentId: string) {
     console.log(`[Queue] Queued Job for Doc: ${documentId}`);
-    // FIRE AND FORGET (No await)
     this.processJob(documentId);
   }
 
@@ -19,7 +19,8 @@ class QueueService {
       await metadataService.updateStatus(documentId, 'PROCESSING');
 
       // 3. Extract & Analyze
-      const text = await aiService.extractText(doc.storagePath);
+      const fullPath = storageService.getPhysicalPath(doc.storagePath);
+      const text = await aiService.extractText(fullPath);
       const { summary, markdown } = await aiService.generateInsights(text);
 
       // 4. Save Results
