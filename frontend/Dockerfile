@@ -14,8 +14,11 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
-# Expose Vite dev server port
-EXPOSE 5173
+# Build Next.js app
+RUN pnpm build
 
-# Start Vite dev server
-CMD ["pnpm", "dev", "--host"]
+# Expose Next.js production port
+EXPOSE 3000
+
+# Start Next.js in production mode
+CMD ["pnpm", "start"]

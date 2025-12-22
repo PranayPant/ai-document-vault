@@ -29,11 +29,12 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "5173:5173"
+      - "3000:3000"
+    env_file:
+      - ./frontend/.env
+      - ./frontend/.env.local
     environment:
-      - VITE_API_URL=http://localhost:3001
-    volumes:
-      - ./frontend/src:/app/src
+      - BACKEND_URL=http://backend:3001                 # For server-side Next.js
     depends_on:
       - backend
     networks:

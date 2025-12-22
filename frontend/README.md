@@ -19,9 +19,8 @@ This frontend application provides an intuitive interface for navigating through
 - **Progressive Discovery**: Folder contents are loaded on-demand as you navigate
 
 ### Smart Routing
-- **Route-Based Navigation**: Each folder and file has its own URL using React Router
+- **Route-Based Navigation**: Each folder and file has its own URL using NextJS's built-in routing
 - **Browser History Integration**: Navigate forward and backward through your browsing history
-- **Deep Linking**: Share direct links to specific folders or files
 
 ### File Viewing
 - **Metadata Display**: View file information before downloading content
@@ -36,7 +35,5 @@ This frontend application provides an intuitive interface for navigating through
 3. **File Selection**: Clicking a file changes the route and fetches full file contents, summary, and markdown view
 
 ### Technology Stack
-- React + TypeScript
-- Vite for fast development and building
-- React Router for routing and navigation
+- NextJS with App Router for out-of-the-box SSR
 - Modern ESM-based architecture
