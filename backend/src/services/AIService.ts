@@ -1,14 +1,20 @@
-import Anthropic from '@anthropic-ai/sdk';
+import {GoogleGenAI} from '@google/genai';
 import fs from 'fs';
 import pdfParse from 'pdf-parse';
+import { z } from "zod";
+
+const summarySchema = z.strictObject({
+  summary: z.string().min(50).max(1000).describe("A concise summary of the document's key points."),
+  markdown: z.string().describe("Detailed insights in markdown format, including headings and bullet points.")
+});
 
 class AIService {
-  private anthropic: Anthropic | null = null;
+  private ai: GoogleGenAI | null = null;
 
   constructor() {
     // If key exists, use it. Otherwise, we mock.
-    if (process.env.ANTHROPIC_API_KEY) {
-      this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    if (process.env.GEMINI_API_KEY) {
+      this.ai = new GoogleGenAI({ apiKey: process.env.ANTHROPIC_API_KEY });
     }
   }
 
@@ -25,7 +31,7 @@ class AIService {
   }
 
   async generateInsights(text: string) {
-    if (!this.anthropic) {
+    if (!this.ai) {
       console.log("⚠️ No API Key. Using Mock Response.");
       await new Promise(r => setTimeout(r, 1500)); // Fake latency
       return {
@@ -35,18 +41,37 @@ class AIService {
     }
 
     try {
-      const msg = await this.anthropic.messages.create({
-        model: "claude-3-haiku-20240307",
-        max_tokens: 1000,
-        messages: [{
-          role: "user",
-          content: `Return JSON only: { "summary": "...", "markdown": "..." } based on:\n\n${text.substring(0, 5000)}`
-        }]
+      const response = await this.ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: `
+        You are an expert document analyst. Given the following document text, provide the below two things:
+          1. A concise summary of the document.
+          2. A markdown version of the document that cleans up the structure and formatting.
+
+        Document Text:
+        """
+        ${text}
+        """
+
+        Please respond in JSON format with the following structure:
+        {
+          "summary": "A concise summary of the document.",
+          "markdown": "A markdown version of the document that cleans up the structure and formatting."
+        }
+        `,
+        config: {
+          responseMimeType: "application/json",
+          maxOutputTokens: 1500,
+          responseJsonSchema: z.toJSONSchema(summarySchema)
+        },
       });
 
-      // @ts-ignore - Anthropic types are sometimes strict about content array
-      const content = msg.content[0].text;
-      return JSON.parse(content);
+      if(!response.text) {
+        throw new Error('No text in response'); 
+      }
+
+      const match = summarySchema.parse(JSON.parse(response.text));
+      return match;
     } catch (error) {
       console.error("AI Error", error);
       return { summary: "AI Processing Failed", markdown: "" };

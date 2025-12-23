@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { DocumentDto } from '../types/backend';
+import Markdown from './Markdown';
 
 interface FileViewerProps {
   documentId: string;
@@ -135,7 +136,7 @@ export default function FileViewer({ documentId }: FileViewerProps) {
                 <div className="prose dark:prose-invert max-w-none">
                   {document.markdown ? (
                     <pre className="whitespace-pre-wrap rounded bg-gray-100 p-4 text-sm text-gray-800 dark:bg-gray-800 dark:text-gray-200">
-                      {document.markdown}
+                      <Markdown content={document.markdown} />
                     </pre>
                   ) : (
                     <p className="text-gray-500">
