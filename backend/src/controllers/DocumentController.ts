@@ -5,6 +5,7 @@ import { storageService } from '../services/StorageService.js';
 
 class DocumentController {
 
+  // Route: GET /files/:id/download
   async download(req: Request, res: Response) {
     try {
       const doc = await metadataService.getDocumentById(req.params.id);
@@ -17,7 +18,6 @@ class DocumentController {
 
       res.download(fullPath, doc.originalName, (err) => {
         if (err) {
-            // Handle error, but response might be partially sent already
             console.error("Download error:", err);
             if (!res.headersSent) res.status(500).send("Could not download file");
         }
@@ -37,14 +37,14 @@ class DocumentController {
 
       const fullPath = storageService.getPhysicalPath(doc.storagePath);
 
-      // Set headers to tell browser to RENDER it
       res.setHeader('Content-Type', doc.mimeType);
-      // "inline" = Attempt to display in browser/iframe
       res.setHeader('Content-Disposition', `inline; filename="${doc.originalName}"`);
 
-      // Stream the file
       res.sendFile(fullPath, (err) => {
-        if (err && !res.headersSent) res.status(500).send("Preview failed");
+        if (err && !res.headersSent) {
+           console.error("Preview error:", err);
+           res.status(500).send("Preview failed");
+        }
       });
     } catch (e) {
       console.error(e);
@@ -52,16 +52,13 @@ class DocumentController {
     }
   }
   
-  // POST /api/documents
+  // Route: POST /api/documents
   async upload(req: Request, res: Response) {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-    // 1. Get Inputs
-    // filePath: The relative path of the file being uploaded (e.g. "MyFolder/doc.pdf")
-    const userPath = req.body.filePath || req.file.originalname;
-
-    // parentFolderId: The ID of the folder the user is currently "looking at"
-    const parentFolderId = req.body.parentFolderId || undefined;
+    // Enforced by validation middleware
+    const parentFolderId = req.body.parentFolderId;
+    const relativePath = req.body.filePath
 
     try {
       const doc = await metadataService.createDocument({
@@ -69,8 +66,8 @@ class DocumentController {
         storagePath: req.file.filename,
         mimeType: req.file.mimetype,
         size: req.file.size,
-        userPath,
-        parentFolderId 
+        parentFolderId,
+        relativePath
       });
 
       await queueService.addJob(doc.id);
@@ -86,13 +83,22 @@ class DocumentController {
   }
 
   // GET /api/folders/:folderId
-  // Handles Navigation (Folder Expansion)
   async getFolder(req: Request, res: Response) {
     try {
       let folderId: string | null = req.params.folderId;
-      if (folderId === 'root') folderId = null;
 
-      const contents = await metadataService.getFolderContents(folderId);
+      if(!folderId) {
+        throw new Error("Folder ID is required");
+      }
+
+      let contents;
+
+      if (folderId === 'root') {
+        contents = await metadataService.getRootFolderMetadata();
+      } else {
+        // Otherwise, treat as UUID
+        contents = await metadataService.getFolderMetadata(folderId);
+      }
       
       const port = process.env.PORT || 3001;
       
@@ -109,7 +115,7 @@ class DocumentController {
       });
     } catch (e) {
       console.error(e);
-      res.status(500).json({ error: 'Failed to fetch folder' });
+      res.status(404).json({ error: 'Folder not found' });
     }
   }
 
@@ -123,13 +129,11 @@ class DocumentController {
       const port = process.env.PORT || 3001;
       const baseUrl = `http://localhost:${port}`;
 
-      const { storagePath, userPath, ...safeDoc } = doc;
+      const { storagePath, ...safeDoc } = doc;
 
       res.json({
         ...safeDoc,
-        // Used for the <iframe> source (Left Pane)
         previewUrl: `${baseUrl}/files/${doc.id}/preview`,
-        // Used for the "Download" button
         downloadUrl: `${baseUrl}/files/${doc.id}/download`
       });
     } catch (e) {

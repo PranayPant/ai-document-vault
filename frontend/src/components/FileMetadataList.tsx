@@ -5,6 +5,7 @@ import FileResourceItem from '@/src/components/FileResourceItem';
 import FileViewer from '@/src/components/FileViewer';
 import type { FileResource } from '@/src/types/FileResource';
 import Dropzone from './Dropzone';
+import { parseSlugtoBreadcrumbs } from '@/src/utils';
 
 interface DynamicDashboardContentProps {
   items: FileResource[];
@@ -19,11 +20,12 @@ export default function DynamicDashboardContent({
   isDocument, 
   documentId 
 }: DynamicDashboardContentProps) {
+
   const router = useRouter();
+  const breadcrumbs = parseSlugtoBreadcrumbs(slug);
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      {/* Breadcrumb */}
       <nav className="mb-6 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
         <button
           onClick={() => router.push('/dashboard')}
@@ -31,21 +33,10 @@ export default function DynamicDashboardContent({
         >
           My Documents
         </button>
-        {slug && slug.length >= 2 && (() => {
-          // Parse slug pairs: ['folder', 'uuid-1', 'folder', 'uuid-2']
-          const breadcrumbs: Array<{ type: string; id: string; index: number }> = [];
-          for (let i = 0; i < slug.length; i += 2) {
-            if (i + 1 < slug.length) {
-              breadcrumbs.push({
-                type: slug[i],
-                id: slug[i + 1],
-                index: i
-              });
-            }
-          }
           
-          return breadcrumbs.map((crumb, index) => {
-            const path = `/dashboard/${slug.slice(0, crumb.index + 2).join('/')}`;
+          {breadcrumbs.map((crumb, index) => {
+            // If slug is empty, breadcrumbs will also be empty []
+            const path = `/dashboard/${slug!.slice(0, crumb.index + 2).join('/')}`;
             const isLast = index === breadcrumbs.length - 1;
             
             return (
@@ -65,8 +56,7 @@ export default function DynamicDashboardContent({
                 )}
               </div>
             );
-          });
-        })()}
+          })}
       </nav>
 
       {/* Show document viewer if viewing a document */}

@@ -19,9 +19,6 @@ model Folder {
   // Contents
   documents Document[]
 
-  // Soft Delete
-  deletedAt DateTime?
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -32,9 +29,6 @@ model Folder {
 model Document {
   id             String    @id @default(uuid())
   originalName   String
-  
-  // Virtual Path (User's view: "/Work/Docs/")
-  userPath       String    @default("/")
   
   // Logical Location (Relational)
   folderId       String?
@@ -53,9 +47,6 @@ model Document {
   summary        String?
   markdown       String?
   
-  // Soft Delete
-  deletedAt      DateTime?
-
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }

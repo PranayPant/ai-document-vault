@@ -4,6 +4,7 @@ import cors from 'cors';
 import multer from 'multer';
 import { documentController } from './controllers/DocumentController';
 import { storageService } from './services/StorageService';
+import 'dotenv';
 
 const app = express();
 app.use(cors());
@@ -13,7 +14,6 @@ app.use(express.json());
 const storage = multer.diskStorage({
   destination: storageService.getUploadPath(),
   filename: (req, file, cb) => {
-    // Generate unique physical filename
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, uniqueSuffix + '-' + file.originalname);
   }
@@ -23,6 +23,11 @@ const upload = multer({ storage });
 // Validation Middlewares
 const validateUpload = [
   body('filePath')
+    .notEmpty()
+    .withMessage('filePath is required')
+    .isString()
+    .withMessage('filePath must be a string'),
+  body('parentFolderId')
     .notEmpty()
     .withMessage('filePath is required')
     .isString()

@@ -1,4 +1,4 @@
-import DynamicDashboardContent from '@/src/components/DynamicDashboardContent';
+import FileMetadataList from '@/src/components/FileMetadataList';
 import { FileResource, FileResourceType } from '@/src/types/FileResource';
 import type { FolderContentsResponse } from '@/src/types/backend';
 import { notFound } from 'next/navigation';
@@ -39,7 +39,6 @@ async function fetchFolderOrDocument(currentId: string, resourceType: FileResour
         isDocument: false
       };
     } else {
-      // Fetch document details
       const response = await fetch(`${baseUrl}/api/documents/${currentId}`, {
         cache: 'no-store'
       });
@@ -88,7 +87,7 @@ export default async function DynamicDashboardPage({
   const { items, isDocument, documentId } = await fetchFolderOrDocument(currentId, resourceType);
 
   return (
-    <DynamicDashboardContent
+    <FileMetadataList
       items={items}
       slug={slug}
       isDocument={isDocument}
