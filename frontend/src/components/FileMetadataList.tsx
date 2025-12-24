@@ -37,26 +37,29 @@ export default function DynamicDashboardContent({
           
           {breadcrumbs?.map((crumb, index) => {
             const path = `/dashboard/folder/${crumb.id}`;
-            const isLast = index === breadcrumbs.length - 1;
             
             return (
               <div key={crumb.id} className="flex items-center gap-2">
                 <span>/</span>
-                {isLast ? (
-                  <span className="font-medium text-gray-900 dark:text-white">
-                    {crumb.name}
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => router.push(path)}
-                    className="hover:text-gray-900 dark:hover:text-white"
-                  >
-                    {crumb.name}
-                  </button>
-                )}
+                <button
+                  onClick={() => router.push(path)}
+                  className="hover:text-gray-900 dark:hover:text-white"
+                >
+                  {crumb.name}
+                </button>
               </div>
             );
           })}
+
+          {/* Show document name as last breadcrumb item (non-clickable) */}
+          {isDocument && documentData && (
+            <div className="flex items-center gap-2">
+              <span>/</span>
+              <span className="font-medium text-gray-900 dark:text-white">
+                {documentData.originalName}
+              </span>
+            </div>
+          )}
       </nav>
 
       {/* Show document viewer if viewing a document */}
