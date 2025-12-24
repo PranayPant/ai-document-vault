@@ -111,7 +111,8 @@ class DocumentController {
       res.json({
         metadata: contents.currentFolder,
         folders: contents.folders,
-        documents: mappedDocs
+        documents: mappedDocs,
+        breadcrumbs: contents.breadcrumbs,
       });
     } catch (e) {
       console.error(e);
@@ -123,7 +124,7 @@ class DocumentController {
   // Handles File Selection (Metadata + Content Link)
   async getOne(req: Request, res: Response) {
     try {
-      const doc = await metadataService.getDocumentById(req.params.id);
+      const doc = await metadataService.getDocumentDetails(req.params.id);
       if (!doc) return res.status(404).json({ error: 'Not found' });
 
       const port = process.env.PORT || 3001;

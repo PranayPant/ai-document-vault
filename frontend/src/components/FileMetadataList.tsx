@@ -4,28 +4,29 @@ import { useRouter } from 'next/navigation';
 import FileResourceItem from '@/src/components/FileResourceItem';
 import FileViewer from '@/src/components/FileViewer';
 import type { FileResource } from '@/src/types/FileResource';
-import Dropzone from './Dropzone';
-import { parseSlugtoBreadcrumbs } from '@/src/utils';
+import { Breadcrumb, DocumentDto } from '@/src/types/backend';
+import Dropzone from '@/src/components/Dropzone';
 
-interface DynamicDashboardContentProps {
+interface FileMetadataListProps {
   items: FileResource[];
   slug?: string[];
   isDocument: boolean;
-  documentId?: string;
+  breadcrumbs?:Breadcrumb[];
+  documentData?: DocumentDto
 }
 
 export default function DynamicDashboardContent({ 
   items, 
   slug, 
   isDocument, 
-  documentId 
-}: DynamicDashboardContentProps) {
+  breadcrumbs,
+  documentData
+}: FileMetadataListProps) {
 
   const router = useRouter();
-  const breadcrumbs = parseSlugtoBreadcrumbs(slug);
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <main className="md:mx-36 px-4 py-8 sm:px-6 lg:px-8">
       <nav className="mb-6 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
         <button
           onClick={() => router.push('/dashboard')}
@@ -34,24 +35,23 @@ export default function DynamicDashboardContent({
           My Documents
         </button>
           
-          {breadcrumbs.map((crumb, index) => {
-            // If slug is empty, breadcrumbs will also be empty []
-            const path = `/dashboard/${slug!.slice(0, crumb.index + 2).join('/')}`;
+          {breadcrumbs?.map((crumb, index) => {
+            const path = `/dashboard/folder/${crumb.id}`;
             const isLast = index === breadcrumbs.length - 1;
             
             return (
-              <div key={index} className="flex items-center gap-2">
+              <div key={crumb.id} className="flex items-center gap-2">
                 <span>/</span>
                 {isLast ? (
                   <span className="font-medium text-gray-900 dark:text-white">
-                    {crumb.id}
+                    {crumb.name}
                   </span>
                 ) : (
                   <button
                     onClick={() => router.push(path)}
                     className="hover:text-gray-900 dark:hover:text-white"
                   >
-                    {crumb.id}
+                    {crumb.name}
                   </button>
                 )}
               </div>
@@ -60,8 +60,8 @@ export default function DynamicDashboardContent({
       </nav>
 
       {/* Show document viewer if viewing a document */}
-      {isDocument && documentId ? (
-        <FileViewer documentId={documentId} />
+      {isDocument && documentData ? (
+        <FileViewer {...documentData} />
       ) : (
         <Dropzone>
           {items.length === 0 ? (

@@ -1,12 +1,13 @@
 import FileMetadataList from '@/src/components/FileMetadataList';
 import { FileResource, FileResourceType } from '@/src/types/FileResource';
-import type { FolderContentsResponse } from '@/src/types/backend';
+import type { Breadcrumb, DocumentDto, FolderContentsResponse } from '@/src/types/backend';
 import { notFound } from 'next/navigation';
 
 async function fetchFolderOrDocument(currentId: string, resourceType: FileResourceType): Promise<{
   items: FileResource[];
   isDocument: boolean;
-  documentId?: string;
+  breadcrumbs?: Breadcrumb[];
+  documentData?: DocumentDto;
 }> {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
   
@@ -33,22 +34,28 @@ async function fetchFolderOrDocument(currentId: string, resourceType: FileResour
         name: doc.originalName,
         type: FileResourceType.DOCUMENT
       }));
+
+      const breadcrumbs = data.breadcrumbs;
       
       return {
         items: [...folders, ...documents],
-        isDocument: false
+        isDocument: false,
+        breadcrumbs
       };
     } else {
       const response = await fetch(`${baseUrl}/api/documents/${currentId}`, {
-        cache: 'no-store'
+        cache: 'no-cache'
       });
       
       if (!response.ok) notFound();
       
+      const {breadcrumbs, ...documentData}: DocumentDto = await response.json();
+      
       return {
         items: [],
         isDocument: true,
-        documentId: currentId
+        breadcrumbs,
+        documentData
       };
     }
   } catch (error) {
@@ -84,14 +91,15 @@ export default async function DynamicDashboardPage({
     notFound();
   }
   
-  const { items, isDocument, documentId } = await fetchFolderOrDocument(currentId, resourceType);
+  const { items, isDocument, breadcrumbs, documentData } = await fetchFolderOrDocument(currentId, resourceType);
 
   return (
     <FileMetadataList
       items={items}
       slug={slug}
       isDocument={isDocument}
-      documentId={documentId}
+      breadcrumbs={breadcrumbs}
+      documentData={documentData}
     />
   );
 }

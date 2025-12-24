@@ -1,7 +1,51 @@
 import path from 'path';
 import { prisma } from '../utils/db.js';
+import { Folder } from '@generated/prisma';
 
 export class MetadataService {
+
+  /**
+   * Walks up the tree from current folder to root.
+   */
+  private async getBreadcrumbs(folderId: string) {
+    const breadcrumbs: { id: string; name: string }[] = [];
+    let currentId: string | null = folderId;
+
+    while (currentId) {
+      const fetchedFolder: Folder | null = await prisma.folder.findUnique({
+        where: { id: currentId }
+      });
+
+      if (!fetchedFolder) break;
+
+      breadcrumbs.unshift({ id: fetchedFolder.id, name: fetchedFolder.name });
+      currentId = fetchedFolder.parentId;
+    }
+    
+    return breadcrumbs;
+  }
+
+  async getDocumentDetails(docId: string) {
+    const doc = await prisma.document.findUnique({
+      where: { id: docId }
+    });
+
+    if (!doc) return null;
+
+    let breadcrumbs: { id: string; name: string }[] = [];
+
+    // If doc belongs to a folder, calculate the path
+    if (doc.folderId) {
+      breadcrumbs = await this.getBreadcrumbs(doc.folderId);
+    }
+
+    // Return flattened object
+    return {
+      ...doc,
+      breadcrumbs
+    };
+  }
+
 
   /**
    * @param relativePathStr - e.g. "Data/2024/Logs" (excluding filename)
@@ -101,6 +145,7 @@ export class MetadataService {
         name: rootFolder.name,
         parentId: null
       },
+      breadcrumbs: [{ id: rootFolder.id, name: rootFolder.name }],
       folders: rootFolder.children,
       documents: rootFolder.documents
     };
@@ -145,6 +190,8 @@ export class MetadataService {
       throw new Error("Folder not found");
     }
 
+    const breadcrumbs = await this.getBreadcrumbs(folderId);
+
     // Flatten the result for the Controller
     return {
       currentFolder: {
@@ -152,6 +199,7 @@ export class MetadataService {
         name: folderWithContents.name,
         parentId: folderWithContents.parentId
       },
+      breadcrumbs,
       folders: folderWithContents.children,
       documents: folderWithContents.documents
     };

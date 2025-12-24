@@ -1,42 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { DocumentDto } from '../types/backend';
 import Markdown from './Markdown';
 
-interface FileViewerProps {
-  documentId: string;
-}
+export default function FileViewer(document: DocumentDto) {
 
-export default function FileViewer({ documentId }: FileViewerProps) {
-  const [document, setDocument] = useState<DocumentDto | null>(null);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'summary' | 'markdown'>('summary');
 
-  useEffect(() => {
-    const fetchDocument = async () => {
-      try {
-        const response = await fetch(`/api/documents/${documentId}`);
-        if (!response.ok) throw new Error('Failed to fetch document');
-        const data = await response.json();
-        setDocument(data);
-      } catch (error) {
-        console.error('Error fetching document:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDocument();
-  }, [documentId]);
-
-  if (loading) {
-    return (
-      <div className="flex h-[calc(100vh-200px)] items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
-      </div>
-    );
-  }
 
   if (!document) {
     return (
