@@ -27,11 +27,10 @@ A full-stack document management system with AI-powered summaries and intelligen
 
 - Node.js 20+ or 22 LTS
 - pnpm (recommended) or npm
-- Docker & Docker Compose (for containerized setup)
-
 ---
 
 ## 🏃 Running Locally (Without Docker)
+`docker` setup is giving issues with instantiating the `dev.db` SQLite file.
 
 ### Backend Setup
 
@@ -47,18 +46,14 @@ A full-stack document management system with AI-powered summaries and intelligen
 
 3. **Configure environment**
    
-   Create `backend/.env`:
+   Enter your api key in `backend/.env`:
    ```env
-   DATABASE_URL="file:./prisma/dev.db"
-   PORT=3001
    GEMINI_API_KEY=""  # Put in real key or leave empty to see mock data
    ```
 
 4. **Initialize database**
    ```bash
    pnpm generate  # Generate Prisma Client
-   pnpm db:push   # Create database schema
-   pnpm db:seed   # Seed db with default (root) folder
    ```
 
 5. **Start the server**
@@ -86,31 +81,6 @@ A full-stack document management system with AI-powered summaries and intelligen
    ```
    
    Frontend will be available at `http://localhost:3000`
-
----
-
-## 🐳 Running with Docker Compose
-
-Docker Compose orchestrates both frontend and backend services with proper networking and environment configuration.
-
-### Quick Start
-
-1. **Ensure you have the backend environment file**
-   
-   Create `backend/.env` (or `.env.local`):
-   ```env
-   DATABASE_URL="file:./dev.db"
-   GEMINI_API_KEY="" // input your real key here or leave blank for mock insight data
-   ```
-
-2. **Build and start all services**
-   ```bash
-   docker compose up --build
-   ```
-
-3. **Access the application**
-   - Backend API: `http://localhost:3001`
-   - Frontend: `http://localhost:3000`
 
 ---
 
@@ -183,6 +153,8 @@ Current prototype focuses on core architecture. Production enhancements include:
 - [ ] Implement ACL on file resources along with basic AuthN and AuthZ
 - [ ] Ability to choose which LLM to use
 - [ ] Shareable file links (Deep Linking)
+- [ ] Caching routes so navigation becomes seamless
+- [ ] Accept more file types, which may require OCR
 
 See [backend/README.md](backend/README.md) for detailed production strategies.
 

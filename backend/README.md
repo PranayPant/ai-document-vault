@@ -2,48 +2,6 @@
 
 This is the backend service for the AI Document Vault, a system designed to upload documents, extract their content, and generate AI-powered summaries and structured Markdown.
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Node.js (v20 or v22 LTS recommended)
-- pnpm (recommended) or npm
-
-### Installation
-
-1. **Install Dependencies**
-   ```bash
-   cd backend
-   pnpm install
-   ```
-
-2. **Environment Setup**
-   Create a `.env` file in the `backend` folder with the following content:
-   ```env
-   DATABASE_URL="file:./dev.db"
-   PORT=3001
-   GEMINI_API_KEY="" 
-   # Leave API Key empty to use "Mock Mode" (simulated AI)
-   ```
-
-3. **Database Setup**
-   Initialize the Prisma Client and create the local SQLite database:
-   ```bash
-   pnpm generate   # Generates the Prisma Client
-   pnpm db:push    # Pushes schema to the local SQLite file
-   pnpm db:seed
-   ```
-
-4. **Start the Server**
-   ```bash
-   pnpm start      # Production start
-   # OR
-   pnpm dev        # Development mode with hot-reload
-   ```
-
-   The server will start at `http://localhost:3001`
-
----
-
 ## 🏗 Architecture & Design Decisions
 
 This backend is built using a **Service-Oriented Architecture** with **Node.js (Express)** and **TypeScript**.

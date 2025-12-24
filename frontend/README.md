@@ -8,6 +8,9 @@ This frontend application provides an intuitive interface for navigating through
 
 ## Features
 
+### File Types Supported
+- Only supporting `.pdf` and `.txt` for now, as `.docx` etc may require an `OCR` engine like `tesseract`. Could be an enhancement.
+
 ### Document Upload
 - **Drag-and-Drop Interface**: Easily upload files by dragging them into the application
 - **Manual Upload**: Traditional file selection for uploading documents
@@ -85,3 +88,4 @@ The breadcrumb system follows a backend-driven approach where breadcrumb data is
 - **Single Source of Truth**: The folder hierarchy in the database drives breadcrumb generation
 - **Performance**: Breadcrumb data is included in the initial folder fetch, requiring no additional API calls (except for document views)
 - **Type Safety**: TypeScript interfaces ensure breadcrumb data structure consistency between frontend and backend
+- **Caching**: Caching the metadata routes would improve UX, but NextJS `cache: force-cache` is giving unstable results so removed for now. Alternatives can be clien-side caching with `react-query` or an external caching service.
