@@ -1,11 +1,12 @@
 import FileMetadataList from '@/src/components/FileMetadataList';
+import FileViewer from '@/src/components/FileViewer';
+import BreadcrumbNav from '@/src/components/BreadcrumbNav';
 import { FileResource, FileResourceType } from '@/src/types/FileResource';
 import type { Breadcrumb, DocumentDto, FolderContentsResponse } from '@/src/types/backend';
 import { notFound } from 'next/navigation';
 
 async function fetchFolderOrDocument(currentId: string, resourceType: FileResourceType): Promise<{
   items: FileResource[];
-  isDocument: boolean;
   breadcrumbs?: Breadcrumb[];
   documentData?: DocumentDto;
 }> {
@@ -15,7 +16,7 @@ async function fetchFolderOrDocument(currentId: string, resourceType: FileResour
     if (resourceType === FileResourceType.FOLDER) {
       // Fetch folder contents
       const response = await fetch(`${baseUrl}/api/folders/${currentId}`, {
-        cache: 'no-store'
+        cache: 'force-cache'
       });
       
       if (!response.ok) notFound();
@@ -39,21 +40,25 @@ async function fetchFolderOrDocument(currentId: string, resourceType: FileResour
       
       return {
         items: [...folders, ...documents],
-        isDocument: false,
         breadcrumbs
       };
     } else {
       const response = await fetch(`${baseUrl}/api/documents/${currentId}`, {
-        cache: 'no-cache'
+        cache: 'force-cache'
       });
       
-      if (!response.ok) notFound();
+      if (!response.ok) {
+        throw new Error("Failed to fetch document data");
+      }
       
       const {breadcrumbs, ...documentData}: DocumentDto = await response.json();
+
+      if(!documentData) {
+        throw new Error("Document data not found");
+      }
       
       return {
         items: [],
-        isDocument: true,
         breadcrumbs,
         documentData
       };
@@ -91,15 +96,25 @@ export default async function DynamicDashboardPage({
     notFound();
   }
   
-  const { items, isDocument, breadcrumbs, documentData } = await fetchFolderOrDocument(currentId, resourceType);
+  const { items, breadcrumbs, documentData } = await fetchFolderOrDocument(currentId, resourceType);
+
+  // Validate document data exists for document views
+  if (resourceType === FileResourceType.DOCUMENT && !documentData) {
+    notFound();
+  }
 
   return (
-    <FileMetadataList
-      items={items}
-      slug={slug}
-      isDocument={isDocument}
-      breadcrumbs={breadcrumbs}
-      documentData={documentData}
-    />
+    <main className="md:mx-36 px-4 py-8 sm:px-6 lg:px-8">
+      <BreadcrumbNav 
+        breadcrumbs={breadcrumbs} 
+        currentItemName={documentData?.originalName}
+      />
+      
+      {resourceType === FileResourceType.FOLDER ? (
+        <FileMetadataList items={items} slug={slug} />
+      ) : (
+        <FileViewer {...documentData!} />
+      )}
+    </main>
   );
 }

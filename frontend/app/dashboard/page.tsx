@@ -6,7 +6,7 @@ async function getRootFolder(): Promise<FileResource | null> {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
     const response = await fetch(`${baseUrl}/api/folders/root`, {
-      cache: 'no-store'
+      cache: 'force-cache'
     });
     
     if (!response.ok) {
