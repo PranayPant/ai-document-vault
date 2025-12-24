@@ -4,7 +4,26 @@ import cors from 'cors';
 import multer from 'multer';
 import { documentController } from './controllers/DocumentController';
 import { storageService } from './services/StorageService';
-import 'dotenv';
+import { logger } from './services/logging/LoggingService';
+
+import 'dotenv/config';
+
+// Configure it before defining app or routes so we capture everything.
+if (process.env.NODE_ENV === 'production') {
+  // In Prod: Maybe we want Console (for AWS CloudWatch) AND a remote service
+  // logger.clearProviders(); // Optional: Clear default console if you don't want it
+  
+  // Example: Add a remote provider (extensibility)
+  // logger.addProvider(new RemoteProvider(process.env.LOGGING_ENDPOINT));
+  
+  logger.setMinLevel(1); // INFO and above
+} else {
+  // In Dev: Default ConsoleProvider is already there from constructor.
+  // We can set level to DEBUG
+  logger.setMinLevel(0); // DEBUG and above
+}
+
+logger.info("🚀 Logger initialized successfully");
 
 const app = express();
 app.use(cors());
