@@ -27,11 +27,10 @@ A full-stack document management system with AI-powered summaries and intelligen
 
 - Node.js 20+ or 22 LTS
 - pnpm (recommended) or npm
-- Docker & Docker Compose (for containerized setup)
-
 ---
 
 ## 🏃 Running Locally (Without Docker)
+`docker` setup is giving issues with instantiating the `dev.db` SQLite file.
 
 ### Backend Setup
 
@@ -47,24 +46,19 @@ A full-stack document management system with AI-powered summaries and intelligen
 
 3. **Configure environment**
    
-   Create `backend/.env`:
+   Enter your api key in `backend/.env`:
    ```env
-   DATABASE_URL="file:./prisma/dev.db"
-   PORT=3001
-   ANTHROPIC_API_KEY=""  # Leave empty for mock mode
+   GEMINI_API_KEY=""  # Put in real key or leave empty to see mock data
    ```
 
 4. **Initialize database**
    ```bash
    pnpm generate  # Generate Prisma Client
-   pnpm db:push   # Create database schema
    ```
 
 5. **Start the server**
    ```bash
-   pnpm start     # Production mode
-   # OR
-   pnpm dev       # Development mode with hot-reload
+   pnpm start
    ```
    
    Backend will be available at `http://localhost:3001`
@@ -81,71 +75,12 @@ A full-stack document management system with AI-powered summaries and intelligen
    pnpm install
    ```
 
-3. **Configure environment** (if needed)
-   
-   Create `frontend/.env`:
-   ```env
-   VITE_API_URL=http://localhost:3001
-   ```
-
-4. **Start the development server**
+3. **Start the development server**
    ```bash
    pnpm dev
    ```
    
-   Frontend will be available at `http://localhost:5173` (or the port Vite assigns)
-
----
-
-## 🐳 Running with Docker Compose
-
-Docker Compose orchestrates both frontend and backend services with proper networking and environment configuration.
-
-### Quick Start
-
-1. **Ensure you have the backend environment file**
-   
-   Create `backend/.env` (or `.env.local`):
-   ```env
-   DATABASE_URL="file:./prisma/dev.db"
-   ANTHROPIC_API_KEY=""
-   ```
-
-2. **Build and start all services**
-   ```bash
-   docker compose up --build
-   ```
-
-3. **Access the application**
-   - Backend API: `http://localhost:3001`
-   - Frontend: `http://localhost:5173`
-
-### Docker Compose Commands
-
-```bash
-# Start services in detached mode
-docker compose up -d
-
-# View logs
-docker compose logs -f
-
-# Stop services
-docker compose down
-
-# Rebuild after code changes
-docker compose up --build
-
-# Remove volumes (reset database)
-docker compose down -v
-```
-
-### Architecture Notes
-
-The Docker setup includes:
-- Automatic database initialization on container startup
-- Volume mounting for persistent uploads and database
-- Health checks for service readiness
-- Isolated networking between services
+   Frontend will be available at `http://localhost:3000`
 
 ---
 
@@ -190,32 +125,16 @@ ai-document-vault/
 
 ---
 
-## 🔑 Key Features
-
-### Backend Highlights
-- **Service Layer Architecture**: Decoupled business logic (StorageService, QueueService, AIService)
-- **Asynchronous Processing**: Non-blocking uploads with background AI processing
-- **Production-Ready Patterns**: Designed for easy migration to S3, PostgreSQL, and Redis
-
-### Frontend Highlights
-- **Progressive Loading**: Metadata-first approach for instant navigation
-- **Deep Linking**: Every folder and file has a shareable URL
-- **Drag-and-Drop**: Intuitive file upload experience
-- **Real-Time Updates**: Status polling for processing documents
-
----
-
 ## 🛠 Technology Stack
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| Frontend | React 18 + TypeScript | UI framework |
-| Build Tool | Vite | Fast development & bundling |
-| Routing | React Router | Client-side navigation |
+| Frontend | NextJS + TypeScript | UI framework |
+| Routing | App Router | Server-Side Rendering |
 | Backend | Node.js + Express | API server |
 | Database | Prisma + SQLite | ORM & data persistence |
-| AI | Anthropic Claude | Content analysis & summarization |
-| Container | Docker + Compose | Deployment & orchestration |
+| AI | Gemini | Content analysis & summarization |
+| Container | Docker + Compose | DX |
 
 ---
 
@@ -233,6 +152,9 @@ Current prototype focuses on core architecture. Production enhancements include:
 - [ ] Delete operations with transactional cleanup
 - [ ] Implement ACL on file resources along with basic AuthN and AuthZ
 - [ ] Ability to choose which LLM to use
+- [ ] Shareable file links (Deep Linking)
+- [ ] Caching routes so navigation becomes seamless
+- [ ] Accept more file types, which may require OCR
 
 See [backend/README.md](backend/README.md) for detailed production strategies.
 

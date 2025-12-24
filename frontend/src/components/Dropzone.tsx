@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { useDropzone, type FileWithPath } from 'react-dropzone';
-import { useParams, usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 interface DropzoneProps {
   children: React.ReactNode;
@@ -27,7 +27,6 @@ export default function Dropzone({ children }: DropzoneProps) {
       return;
     }
 
-    // The UUID is the first capture group
     const currentFolderId = folderMatch[1]; 
 
     setUploading(true);
@@ -61,12 +60,9 @@ export default function Dropzone({ children }: DropzoneProps) {
     onDrop,
     accept: {
       'application/pdf': ['.pdf'],
-      'application/msword': ['.doc'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
       'text/plain': ['.txt'],
-      'application/vnd.ms-excel': ['.xls'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
     },
+    multiple: true,
     noKeyboard: true,
     noClick: true,
     maxFiles: 10,

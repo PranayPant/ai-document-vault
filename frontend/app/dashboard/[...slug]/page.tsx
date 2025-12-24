@@ -1,12 +1,14 @@
-import DynamicDashboardContent from '@/src/components/DynamicDashboardContent';
+import FileMetadataList from '@/src/components/FileMetadataList';
+import FileViewer from '@/src/components/FileViewer';
+import BreadcrumbNav from '@/src/components/BreadcrumbNav';
 import { FileResource, FileResourceType } from '@/src/types/FileResource';
-import type { FolderContentsResponse } from '@/src/types/backend';
+import type { Breadcrumb, DocumentDto, FolderContentsResponse } from '@/src/types/backend';
 import { notFound } from 'next/navigation';
 
 async function fetchFolderOrDocument(currentId: string, resourceType: FileResourceType): Promise<{
   items: FileResource[];
-  isDocument: boolean;
-  documentId?: string;
+  breadcrumbs?: Breadcrumb[];
+  documentData?: DocumentDto;
 }> {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
   
@@ -14,13 +16,15 @@ async function fetchFolderOrDocument(currentId: string, resourceType: FileResour
     if (resourceType === FileResourceType.FOLDER) {
       // Fetch folder contents
       const response = await fetch(`${baseUrl}/api/folders/${currentId}`, {
-        cache: 'no-store'
+        cache: 'no-cache'
       });
       
       if (!response.ok) notFound();
       
       const data: FolderContentsResponse = await response.json();
-      
+
+      console.log('Fetched folder contents:', data);
+
       // Map folders and documents to FileResource format
       const folders: FileResource[] = data.folders.map(folder => ({
         id: folder.id,
@@ -33,23 +37,32 @@ async function fetchFolderOrDocument(currentId: string, resourceType: FileResour
         name: doc.originalName,
         type: FileResourceType.DOCUMENT
       }));
+
+      const breadcrumbs = data.breadcrumbs;
       
       return {
         items: [...folders, ...documents],
-        isDocument: false
+        breadcrumbs
       };
     } else {
-      // Fetch document details
       const response = await fetch(`${baseUrl}/api/documents/${currentId}`, {
-        cache: 'no-store'
+        cache: 'no-cache'
       });
       
-      if (!response.ok) notFound();
+      if (!response.ok) {
+        throw new Error("Failed to fetch document data");
+      }
+      
+      const {breadcrumbs, ...documentData}: DocumentDto = await response.json();
+
+      if(!documentData) {
+        throw new Error("Document data not found");
+      }
       
       return {
         items: [],
-        isDocument: true,
-        documentId: currentId
+        breadcrumbs,
+        documentData
       };
     }
   } catch (error) {
@@ -85,14 +98,25 @@ export default async function DynamicDashboardPage({
     notFound();
   }
   
-  const { items, isDocument, documentId } = await fetchFolderOrDocument(currentId, resourceType);
+  const { items, breadcrumbs, documentData } = await fetchFolderOrDocument(currentId, resourceType);
+
+  // Validate document data exists for document views
+  if (resourceType === FileResourceType.DOCUMENT && !documentData) {
+    notFound();
+  }
 
   return (
-    <DynamicDashboardContent
-      items={items}
-      slug={slug}
-      isDocument={isDocument}
-      documentId={documentId}
-    />
+    <main className="md:mx-36 px-4 py-8 sm:px-6 lg:px-8">
+      <BreadcrumbNav 
+        breadcrumbs={breadcrumbs} 
+        currentItemName={documentData?.originalName}
+      />
+      
+      {resourceType === FileResourceType.FOLDER ? (
+        <FileMetadataList items={items} slug={slug} />
+      ) : (
+        <FileViewer {...documentData!} />
+      )}
+    </main>
   );
 }

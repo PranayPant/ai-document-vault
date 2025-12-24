@@ -10,12 +10,14 @@ export type DocumentStatus = 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 export interface DocumentDto {
   id: string;
   originalName: string;
+  folderId?: string | null;
   status: DocumentStatus;
   summary?: string;
   markdown?: string;
   createdAt: string; // ISO date string
   downloadUrl?: string;
   previewUrl?: string;
+  breadcrumbs?: Breadcrumb[];
 }
 
 // Folder DTO
@@ -33,11 +35,17 @@ export interface UploadResponse {
   documentId: string;
 }
 
+export type Breadcrumb = {
+  id: string;
+  name: string;
+}
+
 // GET /api/folders/:folderId response
 export interface FolderContentsResponse {
   metadata: FolderDto | null;
   folders: FolderDto[];
   documents: DocumentDto[];
+  breadcrumbs: Breadcrumb[];
 }
 
 // GET /api/documents/:id response

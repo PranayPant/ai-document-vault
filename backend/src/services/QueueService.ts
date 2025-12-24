@@ -9,6 +9,14 @@ class QueueService {
     this.processJob(documentId);
   }
 
+  /**
+   * 
+   * @param documentId uuid of the document in SQLite
+   * @returns void
+   * @description Processes the document: 
+   * Extracts text, generates AI insights, and updates metadata.
+   * This is done asynchronously to avoid blocking the upload response.
+   */
   private async processJob(documentId: string) {
     try {
       // 1. Fetch Metadata

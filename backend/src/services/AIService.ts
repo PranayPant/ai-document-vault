@@ -61,7 +61,6 @@ class AIService {
         `,
         config: {
           responseMimeType: "application/json",
-          maxOutputTokens: 1500,
           responseJsonSchema: z.toJSONSchema(summarySchema)
         },
       });
@@ -74,7 +73,7 @@ class AIService {
       return match;
     } catch (error) {
       console.error("AI Error", error);
-      return { summary: "AI Processing Failed", markdown: "" };
+      throw new Error("Failed to generate AI insights");
     }
   }
 }

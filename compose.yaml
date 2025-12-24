@@ -20,7 +20,7 @@ services:
     ports:
       - "3000:3000"
     env_file:
-      - ./frontend/.env.local
+      - ./frontend/.env
     environment:
       - BACKEND_URL=http://backend:3001                 # For server-side Next.js
     depends_on:

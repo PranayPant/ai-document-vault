@@ -1,116 +1,208 @@
-import { prisma } from '../utils/db.js';
 import path from 'path';
-import type { Folder } from '@generated/prisma'; 
+import { prisma } from '../utils/db.js';
+import { Folder } from '@generated/prisma';
 
 export class MetadataService {
 
   /**
-   * RESOLVE VIRTUAL PATH -> FOLDER ID
-   * @param pathStr The relative path (e.g. "ProjectA/specs")
-   * @param rootParentId The ID of the folder we are uploading INTO (optional)
+   * Walks up the tree from current folder to root.
    */
-  async ensureFolderHierarchy(pathStr: string, rootParentId: string | null = null): Promise<string | null> {
-    const segments = pathStr.split('/').filter(p => p.length > 0 && p !== '.');
-    
-    // If path is empty (file dropped directly in folder), return the rootParentId
-    if (segments.length === 0) return rootParentId; 
+  private async getBreadcrumbs(folderId: string) {
+    const breadcrumbs: { id: string; name: string }[] = [];
+    let currentId: string | null = folderId;
 
-    // Start looking/creating inside the target folder (or Root if null)
-    let currentParentId: string | null = rootParentId;
-
-    for (const folderName of segments) {
-      let folder; 
-      
-      // Use standard Find-or-Create Logic
-      // Note: We can use findFirst/create pattern for everything now to be safe/consistent
-      // or stick to the upsert logic if parentId is known not to be null.
-      // For simplicity in this logic, we use findFirst+Create to handle the null case safely.
-      
-      folder = await prisma.folder.findFirst({
-        where: { name: folderName, parentId: currentParentId }
+    while (currentId) {
+      const fetchedFolder: Folder | null = await prisma.folder.findUnique({
+        where: { id: currentId }
       });
 
-      if (!folder) {
-        folder = await prisma.folder.create({
-          data: { name: folderName, parentId: currentParentId }
-        });
-      }
+      if (!fetchedFolder) break;
+
+      breadcrumbs.unshift({ id: fetchedFolder.id, name: fetchedFolder.name });
+      currentId = fetchedFolder.parentId;
+    }
+    
+    return breadcrumbs;
+  }
+
+  async getDocumentDetails(docId: string) {
+    const doc = await prisma.document.findUnique({
+      where: { id: docId }
+    });
+
+    if (!doc) return null;
+
+    let breadcrumbs: { id: string; name: string }[] = [];
+
+    // If doc belongs to a folder, calculate the path
+    if (doc.folderId) {
+      breadcrumbs = await this.getBreadcrumbs(doc.folderId);
+    }
+
+    // Return flattened object
+    return {
+      ...doc,
+      breadcrumbs
+    };
+  }
+
+
+  /**
+   * @param relativePathStr - e.g. "Data/2024/Logs" (excluding filename)
+   * @param rootParentId - The UUID of the folder where the user dropped the files
+   */
+  async ensureFolderHierarchy(relativePathStr: string, rootParentId: string): Promise<string> {
+    // Normalize and split the path into segments
+    // Input: "Data/2024/Logs" -> ["Data", "2024", "Logs"]
+    // Input: "." or "" -> []
+    const segments = relativePathStr.split('/').filter(p => p.length > 0 && p !== '.' && p !== '/');
+
+    let currentParentId = rootParentId;
+
+    for (const folderName of segments) {
+      const folder = await prisma.folder.upsert({
+        where: {
+          name_parentId: {
+            name: folderName,
+            parentId: currentParentId
+          }
+        },
+        update: {}, // No changes if exists
+        create: {
+          name: folderName,
+          parentId: currentParentId
+        }
+      });
 
       currentParentId = folder.id;
     }
-    
+
     return currentParentId;
   }
 
-  /**
-   * CREATE DOCUMENT METADATA
-   */
   async createDocument(data: {
     originalName: string;
     storagePath: string;
     mimeType: string;
     size: number;
-    userPath: string;      // e.g. "ProjectA/file.txt"
-    parentFolderId?: string; // <--- NEW: Context ID
+    parentFolderId: string; // Where the drop happened
+    relativePath: string;   // The full path of the file (e.g. "Data/2024/file.pdf")
   }) {
-    // 1. Get the directory part of the relative path
-    // Input: "ProjectA/file.txt" -> "ProjectA"
-    // Input: "file.txt" -> "." (Empty)
-    const directoryPath = path.dirname(data.userPath);
-    
-    // 2. Resolve folder ID starting from the parent context
-    const folderId = await this.ensureFolderHierarchy(
-      directoryPath, 
-      data.parentFolderId || null // Pass the context
-    );
 
+    // 1. Validate root parent exists
+    // Note: We assume "root-uuid" is valid if passed, or query DB to be safe
+    // If you strictly require UUIDs, this query is good safety:
+    const rootExists = await prisma.folder.findUnique({ where: { id: data.parentFolderId } });
+    if (!rootExists) throw new Error("Target folder does not exist");
+
+    // 2. Extract directory path from full relative path
+    // Input: "Data/2024/file.pdf" -> "Data/2024"
+    // Input: "file.pdf" -> "."
+    const dirName = path.dirname(data.relativePath);
+
+    // 3. Resolve the final destination folder ID
+    const finalFolderId = await this.ensureFolderHierarchy(dirName, data.parentFolderId);
+
+    // 4. Create the document
     return prisma.document.create({
       data: {
         originalName: data.originalName,
         storagePath: data.storagePath,
         mimeType: data.mimeType,
         size: data.size,
-        userPath: data.userPath, // We store the relative path for record keeping
-        folderId: folderId,
+        folderId: finalFolderId, // Linked to the newly created/found sub-folder
         status: 'QUEUED',
       },
     });
   }
 
   /**
-   * FETCH FOLDER CONTENTS (Explorer View)
+   * Uses findFirst({ where: { parentId: null } })
    */
-  async getFolderContents(folderId: string | null) {
-    const folders = await prisma.folder.findMany({
-      where: { 
-        parentId: folderId,
-        deletedAt: null 
-      },
-      orderBy: { name: 'asc' }
-    });
-    
-    const documents = await prisma.document.findMany({
-      where: { 
-        folderId: folderId,
-        deletedAt: null 
-      },
-      orderBy: { originalName: 'asc' },
-      select: {
-        id: true,
-        originalName: true,
-        status: true,
-        createdAt: true,
+  async getRootFolderMetadata() {
+    // 1. Find the Root Folder (where parentId is null)
+    const rootFolder = await prisma.folder.findFirst({
+      where: { parentId: null },
+      include: {
+        children: {
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, parentId: true, createdAt: true }
+        },
+        documents: {
+          orderBy: { originalName: 'asc' },
+          select: { id: true, originalName: true, status: true, createdAt: true, mimeType: true, size: true }
+        }
       }
     });
 
-    let currentFolder = null;
-    if (folderId) {
-      currentFolder = await prisma.folder.findUnique({
-        where: { id: folderId }
-      });
+    if (!rootFolder) {
+      throw new Error("System Root folder not found. Please run seed.");
     }
 
-    return { currentFolder, folders, documents };
+    return {
+      currentFolder: {
+        id: rootFolder.id,
+        name: rootFolder.name,
+        parentId: null
+      },
+      breadcrumbs: [{ id: rootFolder.id, name: rootFolder.name }],
+      folders: rootFolder.children,
+      documents: rootFolder.documents
+    };
+  }
+
+ /**
+   * Get top-level folder metatdata of sub-folders, and documents in one go.
+   * Uses JOINs (via Prisma include) to fetch hierarchy in one round-trip.
+   */
+  async getFolderMetadata(folderId: string) {
+    const folderWithContents = await prisma.folder.findUnique({
+      where: { 
+        id: folderId,
+      },
+      include: {
+        // JOIN 1: Fetch Sub-folders
+        children: {
+          orderBy: { name: 'asc' },
+          select: {
+            id: true,
+            name: true,
+            parentId: true,
+            createdAt: true
+          }
+        },
+        // JOIN 2: Fetch Documents
+        documents: {
+          orderBy: { originalName: 'asc' },
+          select: {
+            id: true,
+            originalName: true,
+            status: true,
+            createdAt: true,
+            mimeType: true,
+            size: true
+          }
+        }
+      }
+    });
+
+    if (!folderWithContents) {
+      throw new Error("Folder not found");
+    }
+
+    const breadcrumbs = await this.getBreadcrumbs(folderId);
+
+    // Flatten the result for the Controller
+    return {
+      currentFolder: {
+        id: folderWithContents.id,
+        name: folderWithContents.name,
+        parentId: folderWithContents.parentId
+      },
+      breadcrumbs,
+      folders: folderWithContents.children,
+      documents: folderWithContents.documents
+    };
   }
 
   async getDocumentById(id: string) {
@@ -129,10 +221,6 @@ export class MetadataService {
       where: { id },
       data: { status: 'COMPLETED', summary, markdown }
     });
-  }
-
-  async softDeleteDocument(id: string) {
-    return prisma.document.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 }
 
