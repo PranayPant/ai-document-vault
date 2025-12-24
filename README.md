@@ -140,10 +140,14 @@ ai-document-vault/
 
 ## ✨ Further Enhancements
 
-If given more time, I would like to re-factor the Backend Services via Strategy Pattern
-so we can swap out LLMs (solving the I don't have `gemini` API key but I have `claude`) and Composite Patterns to use both, saving one as a fallback or potentially using both, comparing outputs, and merging them via some ranking algorithm.
+If given more time, I would like to make a few more additions
+
+I would like to refactor the Backend Services via Strategy Pattern so we can swap out LLMs (solving the I don't have `gemini` API key but I have `claude`) and Composite Patterns to use both, saving one as a fallback or potentially using both, comparing outputs, and merging them via some ranking algorithm.
 
 Similar approach can be applied to other services.
+
+Also, add testing and code coverage is very valuabe if we have th time for it.
+
 
 ## 🔮 Roadmap to Production
 

@@ -5,6 +5,7 @@ import multer from 'multer';
 import { documentController } from './controllers/DocumentController';
 import { storageService } from './services/StorageService';
 import { logger } from './services/logging/LoggingService';
+import { AppError } from './shared/errors';
 
 import 'dotenv/config';
 
@@ -71,19 +72,63 @@ const validateUpload = [
 
 
 // 1. Upload
-app.post('/api/documents', upload.single('file'), validateUpload, (req: Request, res: Response) => documentController.upload(req, res));
+app.post('/api/documents', upload.single('file'), validateUpload, (req: Request, res: Response, next: NextFunction) => documentController.upload(req, res, next));
 
 // 2. Folder Navigation (Tree View)
-app.get('/api/folders/:folderId', (req, res) => documentController.getFolder(req, res));
+app.get('/api/folders/:folderId', (req: Request, res: Response, next: NextFunction) => documentController.getFolder(req, res, next));
 
 // 3. Document Details (File View)
-app.get('/api/documents/:id', (req, res) => documentController.getOne(req, res));
+app.get('/api/documents/:id', (req: Request, res: Response, next: NextFunction) => documentController.getOne(req, res, next));
 
 // 4. Preview Document (inline)
-app.get('/files/:id/preview', (req, res) => documentController.preview(req, res));
+app.get('/files/:id/preview', (req: Request, res: Response, next: NextFunction) => documentController.preview(req, res, next));
 
 // 5. Download Document
-app.get('/files/:id/download', (req, res) => documentController.download(req, res));
+app.get('/files/:id/download', (req: Request, res: Response, next: NextFunction) => documentController.download(req, res, next));
+
+// Global Error Handler Middleware (must be last)
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  // If headers already sent, delegate to default error handler
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  // Handle custom AppError instances
+  if (err instanceof AppError) {
+    logger.error('Application error', {
+      path: req.path,
+      method: req.method,
+      statusCode: err.statusCode,
+      message: err.message,
+      isOperational: err.isOperational,
+      stack: err.stack
+    });
+
+    // Send clean error response to client (no stack trace)
+    return res.status(err.statusCode).json({
+      error: {
+        message: err.message,
+        statusCode: err.statusCode
+      }
+    });
+  }
+
+  // Handle unexpected errors (non-operational)
+  logger.error('Unexpected error', {
+    path: req.path,
+    method: req.method,
+    error: err.message,
+    stack: err.stack
+  });
+
+  // Don't leak internal error details to client
+  return res.status(500).json({
+    error: {
+      message: 'Internal server error',
+      statusCode: 500
+    }
+  });
+});
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

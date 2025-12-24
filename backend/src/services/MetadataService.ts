@@ -1,6 +1,8 @@
 import path from 'path';
 import { prisma } from '../utils/db.js';
 import { Folder } from '@generated/prisma';
+import { logger } from './logging/LoggingService.js';
+import { NotFoundError, DatabaseError, ValidationError } from '../shared/errors.js';
 
 export class MetadataService {
 
@@ -8,42 +10,80 @@ export class MetadataService {
    * Walks up the tree from current folder to root.
    */
   private async getBreadcrumbs(folderId: string) {
-    const breadcrumbs: { id: string; name: string }[] = [];
-    let currentId: string | null = folderId;
+    try {
+      const breadcrumbs: { id: string; name: string }[] = [];
+      let currentId: string | null = folderId;
 
-    while (currentId) {
-      const fetchedFolder: Folder | null = await prisma.folder.findUnique({
-        where: { id: currentId }
+      while (currentId) {
+        const fetchedFolder: Folder | null = await prisma.folder.findUnique({
+          where: { id: currentId }
+        });
+
+        if (!fetchedFolder) {
+          logger.warn('Folder not found while building breadcrumbs', { folderId: currentId });
+          break;
+        }
+
+        breadcrumbs.unshift({ id: fetchedFolder.id, name: fetchedFolder.name });
+        currentId = fetchedFolder.parentId;
+      }
+      
+      logger.debug('Breadcrumbs generated', { folderId, count: breadcrumbs.length });
+      return breadcrumbs;
+    } catch (error) {
+      logger.error('Failed to generate breadcrumbs', { 
+        folderId, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
       });
-
-      if (!fetchedFolder) break;
-
-      breadcrumbs.unshift({ id: fetchedFolder.id, name: fetchedFolder.name });
-      currentId = fetchedFolder.parentId;
+      throw new DatabaseError('Failed to retrieve folder hierarchy');
     }
-    
-    return breadcrumbs;
   }
 
   async getDocumentDetails(docId: string) {
-    const doc = await prisma.document.findUnique({
-      where: { id: docId }
-    });
+    try {
+      if (!docId) {
+        throw new ValidationError('Document ID is required');
+      }
 
-    if (!doc) return null;
+      logger.debug('Fetching document details', { docId });
 
-    let breadcrumbs: { id: string; name: string }[] = [];
+      const doc = await prisma.document.findUnique({
+        where: { id: docId }
+      });
 
-    // If doc belongs to a folder, calculate the path
-    if (doc.folderId) {
-      breadcrumbs = await this.getBreadcrumbs(doc.folderId);
+      if (!doc) {
+        logger.warn('Document not found', { docId });
+        return null;
+      }
+
+      let breadcrumbs: { id: string; name: string }[] = [];
+
+      // If doc belongs to a folder, calculate the path
+      if (doc.folderId) {
+        breadcrumbs = await this.getBreadcrumbs(doc.folderId);
+      }
+
+      logger.info('Document details retrieved', { 
+        docId, 
+        fileName: doc.originalName,
+        status: doc.status
+      });
+
+      // Return flattened object
+      return {
+        ...doc,
+        breadcrumbs
+      };
+    } catch (error) {
+      if (error instanceof ValidationError || error instanceof DatabaseError) {
+        throw error;
+      }
+      logger.error('Failed to get document details', { 
+        docId, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      throw new DatabaseError('Failed to retrieve document details');
     }
-
-    // Return flattened object
-    return {
-      ...doc,
-      breadcrumbs
-    };
   }
 
 
@@ -52,32 +92,52 @@ export class MetadataService {
    * @param rootParentId - The UUID of the folder where the user dropped the files
    */
   async ensureFolderHierarchy(relativePathStr: string, rootParentId: string): Promise<string> {
-    // Normalize and split the path into segments
-    // Input: "Data/2024/Logs" -> ["Data", "2024", "Logs"]
-    // Input: "." or "" -> []
-    const segments = relativePathStr.split('/').filter(p => p.length > 0 && p !== '.' && p !== '/');
+    try {
+      logger.debug('Ensuring folder hierarchy', { relativePath: relativePathStr, rootParentId });
 
-    let currentParentId = rootParentId;
+      // Normalize and split the path into segments
+      const segments = relativePathStr.split('/').filter(p => p.length > 0 && p !== '.' && p !== '/');
 
-    for (const folderName of segments) {
-      const folder = await prisma.folder.upsert({
-        where: {
-          name_parentId: {
+      let currentParentId = rootParentId;
+
+      for (const folderName of segments) {
+        const folder = await prisma.folder.upsert({
+          where: {
+            name_parentId: {
+              name: folderName,
+              parentId: currentParentId
+            }
+          },
+          update: {}, // No changes if exists
+          create: {
             name: folderName,
             parentId: currentParentId
           }
-        },
-        update: {}, // No changes if exists
-        create: {
-          name: folderName,
-          parentId: currentParentId
-        }
+        });
+
+        logger.debug('Folder ensured', { 
+          folderName, 
+          folderId: folder.id, 
+          isNew: folder.createdAt === folder.updatedAt 
+        });
+
+        currentParentId = folder.id;
+      }
+
+      logger.info('Folder hierarchy ensured', { 
+        relativePath: relativePathStr, 
+        finalFolderId: currentParentId 
       });
 
-      currentParentId = folder.id;
+      return currentParentId;
+    } catch (error) {
+      logger.error('Failed to ensure folder hierarchy', { 
+        relativePath: relativePathStr, 
+        rootParentId,
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      throw new DatabaseError('Failed to create folder structure');
     }
-
-    return currentParentId;
   }
 
   async createDocument(data: {
@@ -85,70 +145,116 @@ export class MetadataService {
     storagePath: string;
     mimeType: string;
     size: number;
-    parentFolderId: string; // Where the drop happened
-    relativePath: string;   // The full path of the file (e.g. "Data/2024/file.pdf")
+    parentFolderId: string;
+    relativePath: string;
   }) {
+    try {
+      logger.info('Creating document metadata', { 
+        fileName: data.originalName,
+        parentFolderId: data.parentFolderId,
+        relativePath: data.relativePath
+      });
 
-    // 1. Validate root parent exists
-    // Note: We assume "root-uuid" is valid if passed, or query DB to be safe
-    // If you strictly require UUIDs, this query is good safety:
-    const rootExists = await prisma.folder.findUnique({ where: { id: data.parentFolderId } });
-    if (!rootExists) throw new Error("Target folder does not exist");
+      // 1. Validate root parent exists
+      const rootExists = await prisma.folder.findUnique({ 
+        where: { id: data.parentFolderId } 
+      });
+      
+      if (!rootExists) {
+        logger.error('Target folder does not exist', { 
+          parentFolderId: data.parentFolderId 
+        });
+        throw new NotFoundError('Target folder does not exist');
+      }
 
-    // 2. Extract directory path from full relative path
-    // Input: "Data/2024/file.pdf" -> "Data/2024"
-    // Input: "file.pdf" -> "."
-    const dirName = path.dirname(data.relativePath);
+      // 2. Extract directory path from full relative path
+      const dirName = path.dirname(data.relativePath);
 
-    // 3. Resolve the final destination folder ID
-    const finalFolderId = await this.ensureFolderHierarchy(dirName, data.parentFolderId);
+      // 3. Resolve the final destination folder ID
+      const finalFolderId = await this.ensureFolderHierarchy(dirName, data.parentFolderId);
 
-    // 4. Create the document
-    return prisma.document.create({
-      data: {
-        originalName: data.originalName,
-        storagePath: data.storagePath,
-        mimeType: data.mimeType,
-        size: data.size,
-        folderId: finalFolderId, // Linked to the newly created/found sub-folder
-        status: 'QUEUED',
-      },
-    });
+      // 4. Create the document
+      const document = await prisma.document.create({
+        data: {
+          originalName: data.originalName,
+          storagePath: data.storagePath,
+          mimeType: data.mimeType,
+          size: data.size,
+          folderId: finalFolderId,
+          status: 'QUEUED',
+        },
+      });
+
+      logger.info('Document metadata created', { 
+        documentId: document.id,
+        fileName: data.originalName,
+        folderId: finalFolderId
+      });
+
+      return document;
+    } catch (error) {
+      if (error instanceof NotFoundError || error instanceof DatabaseError) {
+        throw error;
+      }
+      logger.error('Failed to create document', { 
+        fileName: data.originalName,
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      throw new DatabaseError('Failed to create document metadata');
+    }
   }
 
   /**
    * Uses findFirst({ where: { parentId: null } })
    */
   async getRootFolderMetadata() {
-    // 1. Find the Root Folder (where parentId is null)
-    const rootFolder = await prisma.folder.findFirst({
-      where: { parentId: null },
-      include: {
-        children: {
-          orderBy: { name: 'asc' },
-          select: { id: true, name: true, parentId: true, createdAt: true }
-        },
-        documents: {
-          orderBy: { originalName: 'asc' },
-          select: { id: true, originalName: true, status: true, createdAt: true, mimeType: true, size: true }
+    try {
+      logger.debug('Fetching root folder metadata');
+
+      const rootFolder = await prisma.folder.findFirst({
+        where: { parentId: null },
+        include: {
+          children: {
+            orderBy: { name: 'asc' },
+            select: { id: true, name: true, parentId: true, createdAt: true }
+          },
+          documents: {
+            orderBy: { originalName: 'asc' },
+            select: { id: true, originalName: true, status: true, createdAt: true, mimeType: true, size: true }
+          }
         }
+      });
+
+      if (!rootFolder) {
+        logger.error('Root folder not found in database');
+        throw new NotFoundError('System Root folder not found. Please run database seed.');
       }
-    });
 
-    if (!rootFolder) {
-      throw new Error("System Root folder not found. Please run seed.");
+      logger.info('Root folder metadata retrieved', { 
+        folderId: rootFolder.id,
+        childCount: rootFolder.children.length,
+        documentCount: rootFolder.documents.length
+      });
+
+      return {
+        currentFolder: {
+          id: rootFolder.id,
+          name: rootFolder.name,
+          parentId: null
+        },
+        breadcrumbs: [{ id: rootFolder.id, name: rootFolder.name }],
+        folders: rootFolder.children,
+        documents: rootFolder.documents
+      };
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        throw error;
+      }
+      logger.error('Failed to get root folder metadata', { 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      throw new DatabaseError('Failed to retrieve root folder');
     }
-
-    return {
-      currentFolder: {
-        id: rootFolder.id,
-        name: rootFolder.name,
-        parentId: null
-      },
-      breadcrumbs: [{ id: rootFolder.id, name: rootFolder.name }],
-      folders: rootFolder.children,
-      documents: rootFolder.documents
-    };
   }
 
  /**
@@ -156,71 +262,170 @@ export class MetadataService {
    * Uses JOINs (via Prisma include) to fetch hierarchy in one round-trip.
    */
   async getFolderMetadata(folderId: string) {
-    const folderWithContents = await prisma.folder.findUnique({
-      where: { 
-        id: folderId,
-      },
-      include: {
-        // JOIN 1: Fetch Sub-folders
-        children: {
-          orderBy: { name: 'asc' },
-          select: {
-            id: true,
-            name: true,
-            parentId: true,
-            createdAt: true
-          }
+    try {
+      if (!folderId) {
+        throw new ValidationError('Folder ID is required');
+      }
+
+      logger.debug('Fetching folder metadata', { folderId });
+
+      const folderWithContents = await prisma.folder.findUnique({
+        where: { 
+          id: folderId,
         },
-        // JOIN 2: Fetch Documents
-        documents: {
-          orderBy: { originalName: 'asc' },
-          select: {
-            id: true,
-            originalName: true,
-            status: true,
-            createdAt: true,
-            mimeType: true,
-            size: true
+        include: {
+          children: {
+            orderBy: { name: 'asc' },
+            select: {
+              id: true,
+              name: true,
+              parentId: true,
+              createdAt: true
+            }
+          },
+          documents: {
+            orderBy: { originalName: 'asc' },
+            select: {
+              id: true,
+              originalName: true,
+              status: true,
+              createdAt: true,
+              mimeType: true,
+              size: true
+            }
           }
         }
+      });
+
+      if (!folderWithContents) {
+        logger.warn('Folder not found', { folderId });
+        throw new NotFoundError('Folder not found');
       }
-    });
 
-    if (!folderWithContents) {
-      throw new Error("Folder not found");
+      const breadcrumbs = await this.getBreadcrumbs(folderId);
+
+      logger.info('Folder metadata retrieved', { 
+        folderId,
+        folderName: folderWithContents.name,
+        childCount: folderWithContents.children.length,
+        documentCount: folderWithContents.documents.length
+      });
+
+      return {
+        currentFolder: {
+          id: folderWithContents.id,
+          name: folderWithContents.name,
+          parentId: folderWithContents.parentId
+        },
+        breadcrumbs,
+        folders: folderWithContents.children,
+        documents: folderWithContents.documents
+      };
+    } catch (error) {
+      if (error instanceof ValidationError || error instanceof NotFoundError || error instanceof DatabaseError) {
+        throw error;
+      }
+      logger.error('Failed to get folder metadata', { 
+        folderId, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      throw new DatabaseError('Failed to retrieve folder contents');
     }
-
-    const breadcrumbs = await this.getBreadcrumbs(folderId);
-
-    // Flatten the result for the Controller
-    return {
-      currentFolder: {
-        id: folderWithContents.id,
-        name: folderWithContents.name,
-        parentId: folderWithContents.parentId
-      },
-      breadcrumbs,
-      folders: folderWithContents.children,
-      documents: folderWithContents.documents
-    };
   }
 
   async getDocumentById(id: string) {
-    return prisma.document.findUnique({ where: { id } });
+    try {
+      if (!id) {
+        throw new ValidationError('Document ID is required');
+      }
+
+      logger.debug('Fetching document by ID', { documentId: id });
+
+      const document = await prisma.document.findUnique({ where: { id } });
+      
+      if (document) {
+        logger.debug('Document found', { documentId: id, fileName: document.originalName });
+      } else {
+        logger.warn('Document not found', { documentId: id });
+      }
+
+      return document;
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+      logger.error('Failed to get document by ID', { 
+        documentId: id, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      throw new DatabaseError('Failed to retrieve document');
+    }
   }
 
   async updateStatus(id: string, status: string) {
-    return prisma.document.update({
-      where: { id },
-      data: { status }
-    });
+    try {
+      if (!id || !status) {
+        throw new ValidationError('Document ID and status are required');
+      }
+
+      logger.info('Updating document status', { documentId: id, status });
+
+      const document = await prisma.document.update({
+        where: { id },
+        data: { status }
+      });
+
+      logger.info('Document status updated', { 
+        documentId: id, 
+        status,
+        fileName: document.originalName
+      });
+
+      return document;
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+      logger.error('Failed to update document status', { 
+        documentId: id, 
+        status,
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      throw new DatabaseError('Failed to update document status');
+    }
   }
 
   async saveAIResults(id: string, summary: string, markdown: string) {
-    return prisma.document.update({
-      where: { id },
-      data: { status: 'COMPLETED', summary, markdown }
-    });
+    try {
+      if (!id || !summary || !markdown) {
+        throw new ValidationError('Document ID, summary, and markdown are required');
+      }
+
+      logger.info('Saving AI results', { documentId: id });
+
+      const document = await prisma.document.update({
+        where: { id },
+        data: { status: 'COMPLETED', summary, markdown }
+      });
+
+      logger.info('AI results saved', { 
+        documentId: id,
+        fileName: document.originalName,
+        summaryLength: summary.length,
+        markdownLength: markdown.length
+      });
+
+      return document;
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+      logger.error('Failed to save AI results', { 
+        documentId: id,
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      throw new DatabaseError('Failed to save AI analysis results');
+    }
   }
 }
 
