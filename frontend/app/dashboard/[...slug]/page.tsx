@@ -16,13 +16,15 @@ async function fetchFolderOrDocument(currentId: string, resourceType: FileResour
     if (resourceType === FileResourceType.FOLDER) {
       // Fetch folder contents
       const response = await fetch(`${baseUrl}/api/folders/${currentId}`, {
-        cache: 'force-cache'
+        cache: 'no-cache'
       });
       
       if (!response.ok) notFound();
       
       const data: FolderContentsResponse = await response.json();
-      
+
+      console.log('Fetched folder contents:', data);
+
       // Map folders and documents to FileResource format
       const folders: FileResource[] = data.folders.map(folder => ({
         id: folder.id,
@@ -44,7 +46,7 @@ async function fetchFolderOrDocument(currentId: string, resourceType: FileResour
       };
     } else {
       const response = await fetch(`${baseUrl}/api/documents/${currentId}`, {
-        cache: 'force-cache'
+        cache: 'no-cache'
       });
       
       if (!response.ok) {

@@ -6,7 +6,7 @@ async function getRootFolder(): Promise<FileResource | null> {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
     const response = await fetch(`${baseUrl}/api/folders/root`, {
-      cache: 'force-cache'
+      cache: 'no-cache'
     });
     
     if (!response.ok) {
@@ -19,6 +19,8 @@ async function getRootFolder(): Promise<FileResource | null> {
     if(!metadata) {
       throw new Error("Metadata not found for root folder");
     }
+
+    console.log('Root folder metadata:', metadata);
     
     const rootFolder: FileResource = {
       id: metadata.id,
